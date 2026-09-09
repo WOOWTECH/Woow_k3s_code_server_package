@@ -1,0 +1,103 @@
+{{- if .Values.persistence.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "code-server.fullname" . }}-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "code-server.selectorLabels" . | nindent 12 }}-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          # Both the app's PVCs and the backup PVC are RWO — this pod MUST
+          # land on the same node that already holds them, or the mount
+          # simply fails. Longhorn has no backup target configured on
+          # woow-k3s and no cluster-wide recurring jobs, so this CronJob is
+          # the only data protection in place; there is nothing monitoring
+          # whether it actually ran (see docs/DEPLOYMENT.md — house-wide gap,
+          # not specific to this chart).
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      {{- include "code-server.selectorLabels" . | nindent 22 }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: backup
+              image: docker.io/library/busybox:1.36
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  ts=$(date +%Y%m%d-%H%M%S)
+                  keep={{ .Values.backup.keep }}
+
+                  backup_one() {
+                    name="$1"; src="$2"; exclude="${3:-}"
+                    dest="/backup/${name}-${ts}.tar.gz"
+                    echo "==> backing up ${src} -> ${dest}"
+                    # busybox tar exits 1 when a file changes size while being
+                    # read (normal under a live directory) — tolerate rc=1,
+                    # fail on anything else.
+                    if [ -n "${exclude}" ]; then
+                      tar czf "${dest}" -C "${src}" --exclude="${exclude}" . || { rc=$?; [ "$rc" -eq 1 ] || exit "$rc"; }
+                    else
+                      tar czf "${dest}" -C "${src}" . || { rc=$?; [ "$rc" -eq 1 ] || exit "$rc"; }
+                    fi
+                    # Verify before counting it as a real backup — an archive
+                    # that fails its own integrity check is worse than none,
+                    # because it looks like protection until restore day.
+                    if ! tar tzf "${dest}" >/dev/null 2>&1; then
+                      echo "FAIL: ${dest} did not pass tar tzf verification" >&2
+                      rm -f "${dest}"
+                      exit 1
+                    fi
+                    echo "OK: ${dest} verified"
+                    # Prune to the newest N.
+                    ls -1t /backup/${name}-*.tar.gz 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f
+                  }
+
+                  backup_one code-server-pi /data/pi-agent models-store.json
+                  backup_one code-server-workspace /workspace
+              volumeMounts:
+                - name: pi-data
+                  mountPath: /data/pi-agent
+                  readOnly: true
+                - name: workspace
+                  mountPath: /workspace
+                  readOnly: true
+                - name: backup
+                  mountPath: /backup
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 512Mi}
+          volumes:
+            - name: pi-data
+              persistentVolumeClaim:
+                claimName: {{ include "code-server.fullname" . }}-pi-data
+            - name: workspace
+              persistentVolumeClaim:
+                claimName: {{ include "code-server.fullname" . }}-workspace
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "code-server.fullname" . }}-backup
+{{- end }}

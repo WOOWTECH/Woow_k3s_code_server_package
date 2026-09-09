@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "code-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # code-server keeps all state on one RWO volume (pi state + IDE settings +
+  # workspace). Two replicas would double-write every one of them, and RWO
+  # Longhorn volumes deadlock a rolling update on multi-attach anyway —
+  # Recreate is not a stopgap, it is the only correct strategy here. Every
+  # stateful workload on this cluster does the same (omnigent-server,
+  # pi-agent-N, opendesign).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "code-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "code-server.labels" . | nindent 8 }}
+        {{- include "code-server.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll the pod when the settings seed changes; otherwise an edited
+        # ConfigMap sits unapplied until something else triggers a restart.
+        checksum/settings: {{ include (print $.Template.BasePath "/configmap-settings.yaml") . | sha256sum }}
+    spec:
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name }}
+      {{- end }}
+      # code-server + pi make no Kubernetes API calls; a mounted ServiceAccount
+      # token would be pure attack surface on a pod whose whole job is running
+      # arbitrary model-authored code.
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: pi-seed
+          image: {{ include "code-server.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              /usr/local/bin/pi-seed
+              # Seed the IDE user dir (a subPath mount gets no image content —
+              # unlike podman, where a named volume is seeded from the image
+              # on first mount, this PVC subPath starts genuinely empty).
+              mkdir -p /ide
+              if [ ! -f /ide/settings.json ]; then
+                cp /seed/settings.json /ide/settings.json
+              fi
+              # Idempotent merge so an upgraded required-key set always lands
+              # while a user's own edits to other keys survive.
+              tmp=$(mktemp)
+              jq -S -s '.[0] * .[1]' /ide/settings.json /seed/settings.json > "$tmp" && mv "$tmp" /ide/settings.json
+          env:
+            - name: PI_AGENT_DATA_DIR
+              value: /data/pi-agent
+            - name: PI_DEFAULT_PROVIDER
+              value: {{ .Values.pi.defaultProvider | quote }}
+            - name: PI_DEFAULT_MODEL
+              value: {{ .Values.pi.defaultModel | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: pi-data
+              mountPath: /data/pi-agent
+            - name: pi-data
+              mountPath: /ide
+              subPath: ide-user
+            - name: settings
+              mountPath: /seed
+              readOnly: true
+      containers:
+        - name: code-server
+          image: {{ include "code-server.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /workspace
+          # LOAD-BEARING: the image's own ENTRYPOINT is
+          # ["/usr/bin/entrypoint.sh", "--bind-addr", "0.0.0.0:8080", "."] —
+          # the trailing "." is a positional folder arg that code-server
+          # prefers over anything appended after it, so `workingDir` above
+          # (not an arg here) is what actually selects the default folder.
+          # We do NOT set `command:`, so Kubernetes uses that ENTRYPOINT
+          # as-is and `args:` below is appended after it — verified directly
+          # against this exact image: `entrypoint.sh --bind-addr 0.0.0.0:8080
+          # . --trusted-origins <host>` starts cleanly and the extra flag
+          # does not disturb the positional "." folder arg ahead of it.
+          {{- if .Values.cloudflare.hostname }}
+          args:
+            # Defensive only: a proxy that fails to forward the real
+            # Host/Origin makes code-server 403 the WebSocket upgrade — a
+            # dead sidebar/terminal that looks exactly like the ServiceWorker
+            # secure-context bug but is an unrelated failure mode. cloudflared
+            # already forwards Host correctly by default; this just removes
+            # the ambiguity at zero cost. See PARITY_CONTRACT.md's webview
+            # gate verdict. (--trusted-origins takes a type:"string[]" value,
+            # confirmed by reading code-server's own bundled cli.js.)
+            - --trusted-origins
+            - {{ .Values.cloudflare.hostname }}
+          {{- end }}
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: PASSWORD
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: PI_AGENT_DATA_DIR
+              value: /data/pi-agent
+            - name: PI_CODING_AGENT_DIR
+              value: /data/pi-agent
+            - name: PI_TELEMETRY
+              value: "0"
+            - name: PI_SKIP_VERSION_CHECK
+              value: "1"
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.codeServer.port }}
+          # A cold PVC can take a while to attach; the startup probe buys
+          # that time without loosening liveness once the process is up.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.codeServer.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: pi-data
+              mountPath: /data/pi-agent
+            - name: pi-data
+              mountPath: /home/coder/.local/share/code-server/User
+              subPath: ide-user
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        - name: pi-data
+          persistentVolumeClaim:
+            claimName: {{ include "code-server.fullname" . }}-pi-data
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: {{ include "code-server.fullname" . }}-workspace
+        - name: settings
+          configMap:
+            name: {{ include "code-server.fullname" . }}-settings
+            defaultMode: 0444
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

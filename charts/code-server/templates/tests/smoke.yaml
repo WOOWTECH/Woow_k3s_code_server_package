@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "code-server.fullname" . }}-smoke
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: smoke
+      image: curlimages/curl:8.11.1
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "==> code-server /healthz"
+          curl -fsS -o /dev/null -w 'GET /healthz -> %{http_code}\n' \
+            "http://{{ include "code-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.codeServer.port }}/healthz"
+          echo "smoke OK"

@@ -1,0 +1,59 @@
+# WoowTech internal instance — namespace code-server, context woow-k3s.
+#
+# Secrets are NOT in this file. Create them out of band before installing —
+# see docs/DEPLOYMENT.md:
+#   kubectl -n code-server create secret generic code-server-auth --from-literal=PASSWORD=...
+#   kubectl -n code-server create secret generic code-server-cf-creds --from-file=credentials.json=...
+#   kubectl -n code-server create secret docker-registry ghcr-woowtech --docker-server=ghcr.io ...   (only if the image package is private)
+
+image:
+  repository: ghcr.io/woowtech/woow-code-server-amd64
+  # TODO: pin after the podman track publishes the image to GHCR (a
+  # live-deployment step, not part of this repo). Prefer digest once known:
+  #   digest: sha256:<pinned>
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  enabled: true
+  name: ghcr-woowtech
+
+timezone: Asia/Taipei
+
+pi:
+  codingAgentVersion: "0.83.0"
+  acpVersion: "0.0.33"
+  acpClientVersion: "0.2.0"
+  defaultProvider: "openai-codex"
+  defaultModel: "gpt-5.6-sol"
+
+auth:
+  existingSecret: code-server-auth
+  create: false
+
+persistence:
+  # Explicit and required — see values.yaml's comment. woow-k3s carries TWO
+  # StorageClasses marked (default) (local-path and longhorn); an omitted
+  # value here would silently bind the wrong one.
+  storageClassName: longhorn
+  piData:
+    size: 5Gi
+  workspace:
+    size: 20Gi
+  backup:
+    enabled: true
+    size: 20Gi
+
+cloudflare:
+  enabled: true
+  tunnelId: ""   # TODO: fill in after creating the tunnel — see docs/DEPLOYMENT.md
+  existingCredentialsSecret: code-server-cf-creds
+  hostname: code-server-woow-k3s.woowtech.io
+  replicas: 2
+
+networkPolicy:
+  enabled: false   # matches house default (pi-agent-woow, omnigent); flip on when ready to harden
+
+# resources / podSecurityContext left at chart defaults (4 CPU / 8Gi limits —
+# this cluster also hosts 16 production Odoo tenants, so limits are
+# deliberately conservative, not omnigent's 16/24Gi).

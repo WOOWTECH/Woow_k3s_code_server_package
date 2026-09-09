@@ -1,0 +1,152 @@
+# Default values for the code-server chart.
+# A per-team install should only need to override image.digest/tag,
+# persistence.storageClassName, and cloudflare.*.
+#
+# Shared contract: PI_CODING_AGENT_VERSION, PI_ACP_VERSION, ACP_CLIENT_VERSION
+# and the pi state layout are pinned across this chart, Woow_podman_code_server_package
+# and Woow_ha_code_server_add_on. See PARITY_CONTRACT.md before changing any
+# of the pi_* values below.
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  # false by default, matching house convention (Woow_k3s_pi_agent_package):
+  # the operator creates the namespace explicitly per docs/DEPLOYMENT.md,
+  # rather than the chart owning namespace lifecycle.
+  create: false
+
+image:
+  # This chart consumes the SAME image the podman package builds and tests —
+  # not a separate k3s-specific layer. One image means the pi layer (Node 22,
+  # pi 0.83.0, pi-acp 0.0.33, ACP Client 0.2.0, pi-code, pi.sh, pi-seed, the
+  # settings seed) physically cannot drift between podman and k3s.
+  repository: ghcr.io/woowtech/woow-code-server-amd64
+  # Prefer digest (immutable) over tag. Left empty until the podman package's
+  # CI has actually published a build — see docs/DEPLOYMENT.md.
+  digest: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Set true if the ghcr.io/woowtech package is private. woow-k3s-pi-agent is
+# public and needs none; this defaults to true because a newly pushed GHCR
+# package defaults to private and there is no cluster-wide pull credential
+# to fall back on — better to render the reference than to ImagePullBackOff
+# silently. Flip to false once the package is confirmed public.
+imagePullSecrets:
+  enabled: true
+  name: ghcr-woowtech
+
+timezone: Asia/Taipei
+
+# The pi agent's own version pins — see PARITY_CONTRACT.md §2.1. These are
+# recorded here for documentation and for the CI hash-verification step;
+# they are NOT build args (this chart does not build an image), but the
+# pinned image is expected to have been built with exactly these.
+pi:
+  codingAgentVersion: "0.83.0"
+  acpVersion: "0.0.33"
+  acpClientVersion: "0.2.0"
+  # Applied by pi-seed only when this deployment's pi has no settings.json
+  # yet (i.e. before the first `pi login`). Empty = no first-run default.
+  defaultProvider: ""
+  defaultModel: ""
+
+codeServer:
+  port: 8080
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+# code-server's own auth. `create: false` by default — the operator creates
+# this Secret out of band (see docs/DEPLOYMENT.md). Never the literal
+# "woowtech" the podman quadlet uses for its LAN default: this k3s exposure
+# is a public Cloudflare hostname.
+auth:
+  existingSecret: code-server-auth
+  create: false
+  password: ""   # only used when create: true — a real deployment should not set this in values
+
+persistence:
+  # NEVER omit — this cluster carries TWO StorageClasses both marked
+  # (default) (local-path and longhorn), so an unset value is
+  # non-deterministic and would most likely bind node-local, unreplicated
+  # local-path — a rescheduled pod would silently come up with an empty
+  # store. The chart fails to render if this is empty.
+  storageClassName: ""
+  piData:
+    size: 5Gi
+  workspace:
+    size: 20Gi
+  backup:
+    enabled: false
+    size: 20Gi
+
+backup:
+  # "17 3 * * *" matches the house convention (pi-agent-woow/opendesign-backup).
+  schedule: "17 3 * * *"
+  # Retain the newest N archives per volume (pi-data, workspace); older ones
+  # are pruned by the CronJob itself.
+  keep: 7
+
+cloudflare:
+  enabled: true
+  image: cloudflare/cloudflared:2026.7.3
+  # Tunnel UUID (locally-managed tunnel) — required when enabled. Routing
+  # lives in this chart, not the Cloudflare dashboard.
+  tunnelId: ""
+  # Contents of the tunnel credentials JSON. Supply via --set-file or an
+  # existing secret; never commit it.
+  credentialsJson: ""
+  existingCredentialsSecret: ""
+  hostname: ""   # e.g. code-server-woow-k3s.woowtech.io
+  # Extra ingress rules appended to this tunnel's routing table verbatim —
+  # only relevant if this tunnel is ever asked to front a sibling release.
+  extraIngress: []
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# NOT the house "shared NPM + shared tunnel per namespace" pattern
+# (Woow_k3s_pi_agent_package/deploy/npm/) — that exists to let several
+# sibling releases in ONE namespace share tunnel/auth infrastructure without
+# one release's upgrade touching another's routing table. This chart is a
+# single release in its own namespace, so that coupling problem does not
+# exist here; a dedicated cloudflared Deployment is simpler and matches this
+# chart's own single tenant. Revisit only if a second code-server release
+# ever needs to share this namespace.
+
+networkPolicy:
+  enabled: false
+  # Additional cloudflared Deployments allowed to reach this release, by
+  # their `app` label — only needed if this tunnel is ever shared.
+  extraCloudflaredApps: []
+  nodeCIDRs:
+    - 192.168.0.0/16
+  blockedCIDRs:
+    - 10.42.0.0/16
+    - 10.43.0.0/16
+    - 192.168.0.0/16
+    - 169.254.169.254/32
+
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+extraEnv: []
+#  - name: HTTPS_PROXY
+#    value: http://proxy:3128
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

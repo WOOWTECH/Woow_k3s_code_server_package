@@ -1,0 +1,69 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "code-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "code-server.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only the tunnel may reach the app directly — without this, any pod in
+    # this multi-tenant cluster could hit the pod IP on port 8080 with
+    # --auth none-equivalent access if code-server's own auth were ever
+    # bypassed at that layer.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ include "code-server.fullname" . }}-cloudflared
+        {{- range .Values.networkPolicy.extraCloudflaredApps }}
+        - podSelector:
+            matchLabels:
+              app: {{ . }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.codeServer.port }}
+    # kubelet health probes originate from the node, not from a pod.
+    {{- with .Values.networkPolicy.nodeCIDRs }}
+    - from:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - port: {{ $.Values.codeServer.port }}
+    {{- end }}
+  egress:
+    # DNS must be allowed explicitly: kube-dns lives inside the service CIDR
+    # that the next rule excludes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # pi needs the open internet — provider APIs, git remotes, open-vsx.org
+    # (extension gallery), registry.npmjs.org, cdn.agentclientprotocol.com
+    # (the ACP Client extension's agent registry) — so egress is allowed
+    # broadly and the CLUSTER is carved out instead, matching the pi-agent
+    # chart's own verified-reachable egress policy.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- range .Values.networkPolicy.blockedCIDRs }}
+              - {{ . }}
+              {{- end }}
+{{- end }}

@@ -1,0 +1,578 @@
+---
+# Source: code-server/templates/configmap-cloudflared.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: code-server-cloudflared
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+data:
+  # Locally-managed tunnel: the hostname -> service map lives here, in the
+  # chart, instead of the Cloudflare dashboard. This lives in its own file so
+  # the Deployment can checksum it (a checksum/config annotation that
+  # includes the template it is written in is a nested self-reference and
+  # Helm refuses to render it).
+  #
+  # NOT the house "shared NPM + shared tunnel per namespace" pattern used by
+  # Woow_k3s_pi_agent_package's five sibling releases — this chart is a
+  # single release in its own namespace, so the coupling problem that pattern
+  # solves does not exist here. Own dedicated tunnel, direct to the Service.
+  #
+  # Deliberately NO `httpHostHeader` override here (unlike the pi-agent
+  # chart's tunnel, which forces Host to "localhost" because pi-web's own
+  # trust guard demands it). code-server's origin check needs the OPPOSITE:
+  # the browser's real external Host/Origin must reach it unmodified, or the
+  # WebSocket upgrade gets a 403 that looks exactly like the ServiceWorker/
+  # secure-context bug but is a different, unrelated failure mode. cloudflared
+  # forwards the real Host by default — this file must never add an override.
+  config.yaml: |
+    tunnel: 00000000-0000-0000-0000-000000000000
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    metrics: 0.0.0.0:20241
+    no-autoupdate: true
+    ingress:
+      - hostname: code-server-woow-k3s.woowtech.io
+        service: http://code-server.code-server.svc.cluster.local:8080
+        originRequest:
+          connectTimeout: 30s
+      - service: http_status:404
+---
+# Source: code-server/templates/configmap-settings.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: code-server-settings
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+data:
+  # The 6 required keys from PARITY_CONTRACT.md §2.5, byte-for-byte the same
+  # values as the podman package's baked settings.json and the HA add-on's
+  # opt/acp-settings.json. The initContainer below jq-merges this into
+  # /home/coder/.local/share/code-server/User/settings.json on every start —
+  # idempotent, so a user's own edits to other keys survive.
+  settings.json: |
+    {
+        "acp.agents": {
+            "pi": {
+                "command": "pi-code",
+                "args": [],
+                "env": {}
+            }
+        },
+        "extensions.autoUpdate": false,
+        "security.workspace.trust.enabled": false,
+        "security.workspace.trust.startupPrompt": "never",
+        "security.workspace.trust.banner": "never",
+        "security.workspace.trust.emptyWindow": false
+    }
+---
+# Source: code-server/templates/pvc-backup.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: code-server-backup
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Source: code-server/templates/pvc-data.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: code-server-pi-data
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+  annotations:
+    # Keep pi's login/sessions/skills even if the release is uninstalled —
+    # deleting a chart should not be how you lose an authenticated agent.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Source: code-server/templates/pvc-data.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: code-server-workspace
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Source: code-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-server
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+spec:
+  type: ClusterIP
+  selector:
+    app: code-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Source: code-server/templates/cloudflared.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-server-cloudflared
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+    app: code-server-cloudflared
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: code-server-cloudflared
+  template:
+    metadata:
+      labels:
+        app: code-server-cloudflared
+      annotations:
+        checksum/config: d0b02c50e651bb41691ac5486c0dfcd26ef16a375286ccceeaf8238f44ac98ab
+    spec:
+      automountServiceAccountToken: false
+      # Spread the replicas: two tunnel pods on the same node buys nothing
+      # when that node's container runtime is what fails.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: code-server-cloudflared
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.7.3
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config/config.yaml
+            - --metrics
+            - 0.0.0.0:20241
+            - run
+          ports:
+            - name: metrics
+              containerPort: 20241
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 20241
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 20241
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config
+              readOnly: true
+            - name: creds
+              mountPath: /etc/cloudflared/creds
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: code-server-cloudflared
+        - name: creds
+          secret:
+            secretName: code-server-cf-creds
+---
+# Source: code-server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-server
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+spec:
+  replicas: 1
+  # code-server keeps all state on one RWO volume (pi state + IDE settings +
+  # workspace). Two replicas would double-write every one of them, and RWO
+  # Longhorn volumes deadlock a rolling update on multi-attach anyway —
+  # Recreate is not a stopgap, it is the only correct strategy here. Every
+  # stateful workload on this cluster does the same (omnigent-server,
+  # pi-agent-N, opendesign).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: code-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: code-server
+        app.kubernetes.io/instance: code-server
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: code-server
+        helm.sh/chart: code-server-0.1.0
+        app: code-server
+      annotations:
+        # Roll the pod when the settings seed changes; otherwise an edited
+        # ConfigMap sits unapplied until something else triggers a restart.
+        checksum/settings: 480d574002372dc208efe54af23c17dddd703381f2c08488fa6b0f4be1f75644
+    spec:
+      imagePullSecrets:
+        - name: ghcr-woowtech
+      # code-server + pi make no Kubernetes API calls; a mounted ServiceAccount
+      # token would be pure attack surface on a pod whose whole job is running
+      # arbitrary model-authored code.
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: pi-seed
+          image: ghcr.io/woowtech/woow-code-server-amd64:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              /usr/local/bin/pi-seed
+              # Seed the IDE user dir (a subPath mount gets no image content —
+              # unlike podman, where a named volume is seeded from the image
+              # on first mount, this PVC subPath starts genuinely empty).
+              mkdir -p /ide
+              if [ ! -f /ide/settings.json ]; then
+                cp /seed/settings.json /ide/settings.json
+              fi
+              # Idempotent merge so an upgraded required-key set always lands
+              # while a user's own edits to other keys survive.
+              tmp=$(mktemp)
+              jq -S -s '.[0] * .[1]' /ide/settings.json /seed/settings.json > "$tmp" && mv "$tmp" /ide/settings.json
+          env:
+            - name: PI_AGENT_DATA_DIR
+              value: /data/pi-agent
+            - name: PI_DEFAULT_PROVIDER
+              value: "openai-codex"
+            - name: PI_DEFAULT_MODEL
+              value: "gpt-5.6-sol"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: pi-data
+              mountPath: /data/pi-agent
+            - name: pi-data
+              mountPath: /ide
+              subPath: ide-user
+            - name: settings
+              mountPath: /seed
+              readOnly: true
+      containers:
+        - name: code-server
+          image: ghcr.io/woowtech/woow-code-server-amd64:0.1.0
+          imagePullPolicy: IfNotPresent
+          workingDir: /workspace
+          # LOAD-BEARING: the image's own ENTRYPOINT is
+          # ["/usr/bin/entrypoint.sh", "--bind-addr", "0.0.0.0:8080", "."] —
+          # the trailing "." is a positional folder arg that code-server
+          # prefers over anything appended after it, so `workingDir` above
+          # (not an arg here) is what actually selects the default folder.
+          # We do NOT set `command:`, so Kubernetes uses that ENTRYPOINT
+          # as-is and `args:` below is appended after it — verified directly
+          # against this exact image: `entrypoint.sh --bind-addr 0.0.0.0:8080
+          # . --trusted-origins <host>` starts cleanly and the extra flag
+          # does not disturb the positional "." folder arg ahead of it.
+          args:
+            # Defensive only: a proxy that fails to forward the real
+            # Host/Origin makes code-server 403 the WebSocket upgrade — a
+            # dead sidebar/terminal that looks exactly like the ServiceWorker
+            # secure-context bug but is an unrelated failure mode. cloudflared
+            # already forwards Host correctly by default; this just removes
+            # the ambiguity at zero cost. See PARITY_CONTRACT.md's webview
+            # gate verdict. (--trusted-origins takes a type:"string[]" value,
+            # confirmed by reading code-server's own bundled cli.js.)
+            - --trusted-origins
+            - code-server-woow-k3s.woowtech.io
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: code-server-auth
+                  key: PASSWORD
+            - name: TZ
+              value: "Asia/Taipei"
+            - name: PI_AGENT_DATA_DIR
+              value: /data/pi-agent
+            - name: PI_CODING_AGENT_DIR
+              value: /data/pi-agent
+            - name: PI_TELEMETRY
+              value: "0"
+            - name: PI_SKIP_VERSION_CHECK
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          # A cold PVC can take a while to attach; the startup probe buys
+          # that time without loosening liveness once the process is up.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            limits:
+              cpu: "4"
+              memory: 8Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: pi-data
+              mountPath: /data/pi-agent
+            - name: pi-data
+              mountPath: /home/coder/.local/share/code-server/User
+              subPath: ide-user
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        - name: pi-data
+          persistentVolumeClaim:
+            claimName: code-server-pi-data
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: code-server-workspace
+        - name: settings
+          configMap:
+            name: code-server-settings
+            defaultMode: 0444
+---
+# Source: code-server/templates/cronjob-backup.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: code-server-backup
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: code-server-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          # Both the app's PVCs and the backup PVC are RWO — this pod MUST
+          # land on the same node that already holds them, or the mount
+          # simply fails. Longhorn has no backup target configured on
+          # woow-k3s and no cluster-wide recurring jobs, so this CronJob is
+          # the only data protection in place; there is nothing monitoring
+          # whether it actually ran (see docs/DEPLOYMENT.md — house-wide gap,
+          # not specific to this chart).
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      app: code-server
+          securityContext:
+            fsGroup: 1000
+            runAsGroup: 1000
+            runAsUser: 1000
+          containers:
+            - name: backup
+              image: docker.io/library/busybox:1.36
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  ts=$(date +%Y%m%d-%H%M%S)
+                  keep=7
+
+                  backup_one() {
+                    name="$1"; src="$2"; exclude="${3:-}"
+                    dest="/backup/${name}-${ts}.tar.gz"
+                    echo "==> backing up ${src} -> ${dest}"
+                    # busybox tar exits 1 when a file changes size while being
+                    # read (normal under a live directory) — tolerate rc=1,
+                    # fail on anything else.
+                    if [ -n "${exclude}" ]; then
+                      tar czf "${dest}" -C "${src}" --exclude="${exclude}" . || { rc=$?; [ "$rc" -eq 1 ] || exit "$rc"; }
+                    else
+                      tar czf "${dest}" -C "${src}" . || { rc=$?; [ "$rc" -eq 1 ] || exit "$rc"; }
+                    fi
+                    # Verify before counting it as a real backup — an archive
+                    # that fails its own integrity check is worse than none,
+                    # because it looks like protection until restore day.
+                    if ! tar tzf "${dest}" >/dev/null 2>&1; then
+                      echo "FAIL: ${dest} did not pass tar tzf verification" >&2
+                      rm -f "${dest}"
+                      exit 1
+                    fi
+                    echo "OK: ${dest} verified"
+                    # Prune to the newest N.
+                    ls -1t /backup/${name}-*.tar.gz 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f
+                  }
+
+                  backup_one code-server-pi /data/pi-agent models-store.json
+                  backup_one code-server-workspace /workspace
+              volumeMounts:
+                - name: pi-data
+                  mountPath: /data/pi-agent
+                  readOnly: true
+                - name: workspace
+                  mountPath: /workspace
+                  readOnly: true
+                - name: backup
+                  mountPath: /backup
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 512Mi}
+          volumes:
+            - name: pi-data
+              persistentVolumeClaim:
+                claimName: code-server-pi-data
+            - name: workspace
+              persistentVolumeClaim:
+                claimName: code-server-workspace
+            - name: backup
+              persistentVolumeClaim:
+                claimName: code-server-backup
+---
+# Source: code-server/templates/tests/smoke.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: code-server-smoke
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: smoke
+      image: curlimages/curl:8.11.1
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "==> code-server /healthz"
+          curl -fsS -o /dev/null -w 'GET /healthz -> %{http_code}\n' \
+            "http://code-server.code-server.svc.cluster.local:8080/healthz"
+          echo "smoke OK"

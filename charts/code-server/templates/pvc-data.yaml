@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "code-server.fullname" . }}-pi-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+  annotations:
+    # Keep pi's login/sessions/skills even if the release is uninstalled —
+    # deleting a chart should not be how you lose an authenticated agent.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ required "persistence.storageClassName must be set explicitly (two StorageClasses are marked default on woow-k3s: local-path and longhorn)" .Values.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.piData.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "code-server.fullname" . }}-workspace
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ required "persistence.storageClassName must be set explicitly (two StorageClasses are marked default on woow-k3s: local-path and longhorn)" .Values.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.workspace.size }}

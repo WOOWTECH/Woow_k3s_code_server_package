@@ -1,0 +1,17 @@
+{{- if .Values.persistence.backup.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "code-server.fullname" . }}-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ required "persistence.storageClassName must be set explicitly" .Values.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backup.size }}
+{{- end }}

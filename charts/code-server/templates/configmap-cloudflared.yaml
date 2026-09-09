@@ -1,0 +1,50 @@
+{{- if .Values.cloudflare.enabled }}
+{{- if not .Values.cloudflare.tunnelId }}
+{{- fail "cloudflare.tunnelId is required when cloudflare.enabled=true" }}
+{{- end }}
+{{- if not .Values.cloudflare.hostname }}
+{{- fail "cloudflare.hostname is required when cloudflare.enabled=true" }}
+{{- end }}
+{{- $svc := include "code-server.fullname" . -}}
+{{- $ns := .Release.Namespace -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "code-server.fullname" . }}-cloudflared
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+data:
+  # Locally-managed tunnel: the hostname -> service map lives here, in the
+  # chart, instead of the Cloudflare dashboard. This lives in its own file so
+  # the Deployment can checksum it (a checksum/config annotation that
+  # includes the template it is written in is a nested self-reference and
+  # Helm refuses to render it).
+  #
+  # NOT the house "shared NPM + shared tunnel per namespace" pattern used by
+  # Woow_k3s_pi_agent_package's five sibling releases — this chart is a
+  # single release in its own namespace, so the coupling problem that pattern
+  # solves does not exist here. Own dedicated tunnel, direct to the Service.
+  #
+  # Deliberately NO `httpHostHeader` override here (unlike the pi-agent
+  # chart's tunnel, which forces Host to "localhost" because pi-web's own
+  # trust guard demands it). code-server's origin check needs the OPPOSITE:
+  # the browser's real external Host/Origin must reach it unmodified, or the
+  # WebSocket upgrade gets a 403 that looks exactly like the ServiceWorker/
+  # secure-context bug but is a different, unrelated failure mode. cloudflared
+  # forwards the real Host by default — this file must never add an override.
+  config.yaml: |
+    tunnel: {{ .Values.cloudflare.tunnelId }}
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    metrics: 0.0.0.0:20241
+    no-autoupdate: true
+    ingress:
+      - hostname: {{ .Values.cloudflare.hostname }}
+        service: http://{{ $svc }}.{{ $ns }}.svc.cluster.local:{{ .Values.codeServer.port }}
+        originRequest:
+          connectTimeout: 30s
+      {{- with .Values.cloudflare.extraIngress }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      - service: http_status:404
+{{- end }}

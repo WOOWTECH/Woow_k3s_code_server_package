@@ -1,0 +1,19 @@
+apiVersion: v2
+name: code-server
+description: code-server + pi coding agent + ACP chat sidebar, for k3s
+type: application
+version: 0.1.0
+appVersion: "4.135.0+pi0.83.0"
+home: https://github.com/WOOWTECH/Woow_k3s_code_server_package
+sources:
+  - https://github.com/WOOWTECH/Woow_k3s_code_server_package
+  - https://github.com/WOOWTECH/Woow_podman_code_server_package
+  - https://github.com/WOOWTECH/Woow_ha_code_server_add_on
+maintainers:
+  - name: WOOWTECH
+    email: woowtech@designsmart.com.tw
+keywords:
+  - code-server
+  - pi-agent
+  - vscode
+  - coding-agent
