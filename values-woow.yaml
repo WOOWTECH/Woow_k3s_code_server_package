@@ -8,14 +8,25 @@
 
 image:
   repository: ghcr.io/woowtech/woow-code-server-amd64
-  # TODO: pin after the podman track publishes the image to GHCR (a
-  # live-deployment step, not part of this repo). Prefer digest once known:
-  #   digest: sha256:<pinned>
-  tag: "0.1.0"
+  # Published by Woow_podman_code_server_package's build.yml on merge to
+  # main (run 34414564430, 2026-09-09, PR #2). Supersedes the first
+  # digest (8c35da35...) published from PR #1 — that build's pi-seed
+  # crash-looped on a real k3s PVC (chmod EPERM on a root-owned mount
+  # root; fsGroup grants group-write, not ownership). Pinned by digest,
+  # not the floating :main tag. Verified pullable ANONYMOUSLY (podman
+  # logout ghcr.io; pull succeeded) — the package inherited public
+  # visibility from the public source repo, so no imagePullSecret is
+  # needed after all (contrary to the chart's own conservative default
+  # below).
+  digest: "sha256:6e216715ec73c81a7ed099bc59005a93b987ec855abc104817aca364a5fbe3c0"
+  tag: "main"
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
-  enabled: true
+  # Confirmed unnecessary for this image (see above) — GHCR packages in
+  # this org inherit their source repo's public visibility automatically,
+  # they do not default to private the way a bare `docker push` would.
+  enabled: false
   name: ghcr-woowtech
 
 timezone: Asia/Taipei
@@ -46,7 +57,11 @@ persistence:
 
 cloudflare:
   enabled: true
-  tunnelId: ""   # TODO: fill in after creating the tunnel — see docs/DEPLOYMENT.md
+  # Tunnel created 2026-09-09 via the Cloudflare API (account
+  # 9c27f623ee596e0b67be56263bcb1974, zone woowtech.io). DNS CNAME
+  # code-server-woow-k3s.woowtech.io -> f36600ac-....cfargotunnel.com
+  # created in the same pass.
+  tunnelId: "f36600ac-2ebf-49b0-b878-74334944f3cb"
   existingCredentialsSecret: code-server-cf-creds
   hostname: code-server-woow-k3s.woowtech.io
   replicas: 2

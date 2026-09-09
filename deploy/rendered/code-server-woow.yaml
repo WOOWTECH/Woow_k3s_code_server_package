@@ -31,7 +31,7 @@ data:
   # secure-context bug but is a different, unrelated failure mode. cloudflared
   # forwards the real Host by default — this file must never add an override.
   config.yaml: |
-    tunnel: 00000000-0000-0000-0000-000000000000
+    tunnel: f36600ac-2ebf-49b0-b878-74334944f3cb
     credentials-file: /etc/cloudflared/creds/credentials.json
     metrics: 0.0.0.0:20241
     no-autoupdate: true
@@ -185,7 +185,7 @@ spec:
       labels:
         app: code-server-cloudflared
       annotations:
-        checksum/config: d0b02c50e651bb41691ac5486c0dfcd26ef16a375286ccceeaf8238f44ac98ab
+        checksum/config: 851cb811f34f852111cfdf653f0132906e3025c6a3cc2f9f6af9cab75d666089
     spec:
       automountServiceAccountToken: false
       # Spread the replicas: two tunnel pods on the same node buys nothing
@@ -289,8 +289,6 @@ spec:
         # ConfigMap sits unapplied until something else triggers a restart.
         checksum/settings: 480d574002372dc208efe54af23c17dddd703381f2c08488fa6b0f4be1f75644
     spec:
-      imagePullSecrets:
-        - name: ghcr-woowtech
       # code-server + pi make no Kubernetes API calls; a mounted ServiceAccount
       # token would be pure attack surface on a pod whose whole job is running
       # arbitrary model-authored code.
@@ -302,7 +300,7 @@ spec:
       terminationGracePeriodSeconds: 60
       initContainers:
         - name: pi-seed
-          image: ghcr.io/woowtech/woow-code-server-amd64:0.1.0
+          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:6e216715ec73c81a7ed099bc59005a93b987ec855abc104817aca364a5fbe3c0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -342,7 +340,7 @@ spec:
               readOnly: true
       containers:
         - name: code-server
-          image: ghcr.io/woowtech/woow-code-server-amd64:0.1.0
+          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:6e216715ec73c81a7ed099bc59005a93b987ec855abc104817aca364a5fbe3c0
           imagePullPolicy: IfNotPresent
           workingDir: /workspace
           # LOAD-BEARING: the image's own ENTRYPOINT is
