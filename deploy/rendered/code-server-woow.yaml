@@ -31,7 +31,7 @@ data:
   # secure-context bug but is a different, unrelated failure mode. cloudflared
   # forwards the real Host by default — this file must never add an override.
   config.yaml: |
-    tunnel: 00000000-0000-0000-0000-000000000000
+    tunnel: f36600ac-2ebf-49b0-b878-74334944f3cb
     credentials-file: /etc/cloudflared/creds/credentials.json
     metrics: 0.0.0.0:20241
     no-autoupdate: true
@@ -218,7 +218,7 @@ spec:
       labels:
         app: code-server-cloudflared
       annotations:
-        checksum/config: d0b02c50e651bb41691ac5486c0dfcd26ef16a375286ccceeaf8238f44ac98ab
+        checksum/config: 851cb811f34f852111cfdf653f0132906e3025c6a3cc2f9f6af9cab75d666089
     spec:
       automountServiceAccountToken: false
       # Spread the replicas: two tunnel pods on the same node buys nothing
@@ -335,7 +335,7 @@ spec:
       terminationGracePeriodSeconds: 60
       initContainers:
         - name: pi-seed
-          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:2603962ed3648c32f6a1f60aaa54c034566608bd45fa6d099cb79cd1393bd18f
+          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:fa9d6eb67d47a14d00a5409df6dc540f73f9dfbf3ea1a506b79b6aa101005d9d
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -375,7 +375,7 @@ spec:
               readOnly: true
       containers:
         - name: code-server
-          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:2603962ed3648c32f6a1f60aaa54c034566608bd45fa6d099cb79cd1393bd18f
+          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:fa9d6eb67d47a14d00a5409df6dc540f73f9dfbf3ea1a506b79b6aa101005d9d
           imagePullPolicy: IfNotPresent
           workingDir: /workspace
           # LOAD-BEARING: the image's own ENTRYPOINT is

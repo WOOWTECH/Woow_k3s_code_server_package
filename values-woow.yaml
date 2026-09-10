@@ -18,7 +18,7 @@ image:
   # visibility from the public source repo, so no imagePullSecret is
   # needed after all (contrary to the chart's own conservative default
   # below).
-  digest: "sha256:2603962ed3648c32f6a1f60aaa54c034566608bd45fa6d099cb79cd1393bd18f"
+  digest: "sha256:fa9d6eb67d47a14d00a5409df6dc540f73f9dfbf3ea1a506b79b6aa101005d9d"
   tag: "main"
   pullPolicy: IfNotPresent
 
