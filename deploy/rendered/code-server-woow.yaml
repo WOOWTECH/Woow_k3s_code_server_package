@@ -31,7 +31,7 @@ data:
   # secure-context bug but is a different, unrelated failure mode. cloudflared
   # forwards the real Host by default — this file must never add an override.
   config.yaml: |
-    tunnel: f36600ac-2ebf-49b0-b878-74334944f3cb
+    tunnel: 00000000-0000-0000-0000-000000000000
     credentials-file: /etc/cloudflared/creds/credentials.json
     metrics: 0.0.0.0:20241
     no-autoupdate: true
@@ -218,7 +218,7 @@ spec:
       labels:
         app: code-server-cloudflared
       annotations:
-        checksum/config: 851cb811f34f852111cfdf653f0132906e3025c6a3cc2f9f6af9cab75d666089
+        checksum/config: d0b02c50e651bb41691ac5486c0dfcd26ef16a375286ccceeaf8238f44ac98ab
     spec:
       automountServiceAccountToken: false
       # Spread the replicas: two tunnel pods on the same node buys nothing
