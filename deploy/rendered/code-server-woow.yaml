@@ -42,6 +42,39 @@ data:
           connectTimeout: 30s
       - service: http_status:404
 ---
+# Source: code-server/templates/configmap-gitconfig.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: code-server-gitconfig
+  namespace: code-server
+  labels:
+    app.kubernetes.io/name: code-server
+    app.kubernetes.io/instance: code-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: code-server
+    helm.sh/chart: code-server-0.1.0
+data:
+  # Mounted read-only at /etc/gitconfig — git's SYSTEM layer, deliberately
+  # not ~/.gitconfig. Two reasons, both found in the 2026-09 field test:
+  #
+  #   1. A k3s pod hostname has no dot in it, so git's identity auto-detect
+  #      produces `coder@<pod>.(none)`, rejects it, and `git commit` exits
+  #      128 in a fresh clone. `git config --global` fixes it until the pod
+  #      restarts — $HOME is not on the PVC.
+  #   2. pi-code re-points HOME at the pi state volume before launching the
+  #      ACP adapter. An identity that lives in ~/.gitconfig is therefore
+  #      invisible to the chat panel's pi, and the same repo ends up with
+  #      commits from two different authors. At the system path it applies
+  #      regardless of HOME.
+  #
+  # ~/.gitconfig stays an ordinary writable file that overrides this, so a
+  # user can still set a per-session identity the normal way.
+  gitconfig: |
+    [user]
+        name = WOOWTECH Code Server
+        email = woowtech@designsmart.com.tw
+---
 # Source: code-server/templates/configmap-settings.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -288,6 +321,7 @@ spec:
         # Roll the pod when the settings seed changes; otherwise an edited
         # ConfigMap sits unapplied until something else triggers a restart.
         checksum/settings: 480d574002372dc208efe54af23c17dddd703381f2c08488fa6b0f4be1f75644
+        checksum/gitconfig: b0ea14d06c87be69ff719da19f2ab9b49f0e72e3e0e0312649095f57a925658a
     spec:
       # code-server + pi make no Kubernetes API calls; a mounted ServiceAccount
       # token would be pure attack surface on a pod whose whole job is running
@@ -424,6 +458,12 @@ spec:
               subPath: ide-user
             - name: workspace
               mountPath: /workspace
+            # git's SYSTEM config. See configmap-gitconfig.yaml for why this
+            # is /etc/gitconfig and not ~/.gitconfig.
+            - name: gitconfig
+              mountPath: /etc/gitconfig
+              subPath: gitconfig
+              readOnly: true
       volumes:
         - name: pi-data
           persistentVolumeClaim:
@@ -434,6 +474,10 @@ spec:
         - name: settings
           configMap:
             name: code-server-settings
+            defaultMode: 0444
+        - name: gitconfig
+          configMap:
+            name: code-server-gitconfig
             defaultMode: 0444
 ---
 # Source: code-server/templates/cronjob-backup.yaml
