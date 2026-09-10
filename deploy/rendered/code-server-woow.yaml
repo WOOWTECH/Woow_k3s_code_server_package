@@ -334,7 +334,7 @@ spec:
       terminationGracePeriodSeconds: 60
       initContainers:
         - name: pi-seed
-          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:6e216715ec73c81a7ed099bc59005a93b987ec855abc104817aca364a5fbe3c0
+          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:2603962ed3648c32f6a1f60aaa54c034566608bd45fa6d099cb79cd1393bd18f
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -374,7 +374,7 @@ spec:
               readOnly: true
       containers:
         - name: code-server
-          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:6e216715ec73c81a7ed099bc59005a93b987ec855abc104817aca364a5fbe3c0
+          image: ghcr.io/woowtech/woow-code-server-amd64@sha256:2603962ed3648c32f6a1f60aaa54c034566608bd45fa6d099cb79cd1393bd18f
           imagePullPolicy: IfNotPresent
           workingDir: /workspace
           # LOAD-BEARING: the image's own ENTRYPOINT is
