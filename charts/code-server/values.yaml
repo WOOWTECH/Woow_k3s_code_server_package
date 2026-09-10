@@ -52,6 +52,22 @@ pi:
   defaultProvider: ""
   defaultModel: ""
 
+# Git identity, rendered into a ConfigMap and mounted at /etc/gitconfig.
+#
+# Not cosmetic: git's identity auto-detect needs a hostname containing a
+# dot, and a k3s pod hostname (code-server-7b6f95f546-85r6s) has none — so
+# git rejects the derived `coder@code-server-7b6f95f546-85r6s.(none)` and
+# `git commit` exits 128 out of the box. `git config --global` inside the
+# pod does work, but $HOME is not on the PVC, so it is lost on every
+# restart. /etc/gitconfig is git's system layer: it applies whatever HOME
+# is, which also means the ACP panel's pi (whose HOME is re-pointed at the
+# pi state volume by pi-code) sees the same identity the terminal does.
+#
+# Leave both empty to mount nothing and keep the current behaviour.
+git:
+  userName: ""
+  userEmail: ""
+
 codeServer:
   port: 8080
   resources:

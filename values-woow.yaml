@@ -38,6 +38,10 @@ pi:
   defaultProvider: "openai-codex"
   defaultModel: "gpt-5.6-sol"
 
+git:
+  userName: "WOOWTECH Code Server"
+  userEmail: "woowtech@designsmart.com.tw"
+
 auth:
   existingSecret: code-server-auth
   create: false
