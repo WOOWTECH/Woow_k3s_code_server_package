@@ -102,7 +102,7 @@ data:
                 "env": {}
             }
         },
-        "extensions.autoUpdate": false,
+        "extensions.autoUpdate": "off",
         "security.workspace.trust.enabled": false,
         "security.workspace.trust.startupPrompt": "never",
         "security.workspace.trust.banner": "never",
@@ -320,7 +320,7 @@ spec:
       annotations:
         # Roll the pod when the settings seed changes; otherwise an edited
         # ConfigMap sits unapplied until something else triggers a restart.
-        checksum/settings: 480d574002372dc208efe54af23c17dddd703381f2c08488fa6b0f4be1f75644
+        checksum/settings: 2340c119ce217926f84dc8086c067f705efdb9e065c84b581dd18d71859f7680
         checksum/gitconfig: b0ea14d06c87be69ff719da19f2ab9b49f0e72e3e0e0312649095f57a925658a
     spec:
       # code-server + pi make no Kubernetes API calls; a mounted ServiceAccount

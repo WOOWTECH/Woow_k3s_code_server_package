@@ -20,7 +20,7 @@ data:
                 "env": {}
             }
         },
-        "extensions.autoUpdate": false,
+        "extensions.autoUpdate": "off",
         "security.workspace.trust.enabled": false,
         "security.workspace.trust.startupPrompt": "never",
         "security.workspace.trust.banner": "never",
