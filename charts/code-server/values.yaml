@@ -158,6 +158,22 @@ podSecurityContext:
   runAsUser: 1000
   runAsGroup: 1000
   fsGroup: 1000
+  # Without this, kubelet walks the whole PVC on EVERY pod start and ORs the
+  # owner's permission bits into the group's. That silently re-widened
+  # /data/pi-agent/auth.json — pi's OAuth credential — from 0600 to 0660 on
+  # this deployment, while the byte-identical podman container kept it at
+  # 0600. Same image, same umask (0022); the difference was entirely kubelet.
+  #
+  # OnRootMismatch only does that walk when the volume's ROOT directory does
+  # not already have the expected owner/mode, which is the first mount and
+  # then never again. It is also the documented fix for slow starts on large
+  # volumes.
+  #
+  # The practical exposure here was nil — group 1000 is the run user's own
+  # private group and no second identity exists in the pod — but a
+  # credential file whose mode depends on which orchestrator mounted it is a
+  # parity break, and PARITY_CONTRACT P28 asserts 0600.
+  fsGroupChangePolicy: OnRootMismatch
 
 extraEnv: []
 #  - name: HTTPS_PROXY
