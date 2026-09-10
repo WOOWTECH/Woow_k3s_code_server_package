@@ -1,0 +1,33 @@
+{{- if or .Values.git.userName .Values.git.userEmail }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "code-server.fullname" . }}-gitconfig
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+data:
+  # Mounted read-only at /etc/gitconfig — git's SYSTEM layer, deliberately
+  # not ~/.gitconfig. Two reasons, both found in the 2026-09 field test:
+  #
+  #   1. A k3s pod hostname has no dot in it, so git's identity auto-detect
+  #      produces `coder@<pod>.(none)`, rejects it, and `git commit` exits
+  #      128 in a fresh clone. `git config --global` fixes it until the pod
+  #      restarts — $HOME is not on the PVC.
+  #   2. pi-code re-points HOME at the pi state volume before launching the
+  #      ACP adapter. An identity that lives in ~/.gitconfig is therefore
+  #      invisible to the chat panel's pi, and the same repo ends up with
+  #      commits from two different authors. At the system path it applies
+  #      regardless of HOME.
+  #
+  # ~/.gitconfig stays an ordinary writable file that overrides this, so a
+  # user can still set a per-session identity the normal way.
+  gitconfig: |
+    [user]
+    {{- with .Values.git.userName }}
+        name = {{ . }}
+    {{- end }}
+    {{- with .Values.git.userEmail }}
+        email = {{ . }}
+    {{- end }}
+{{- end }}

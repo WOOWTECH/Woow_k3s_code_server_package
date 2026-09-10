@@ -27,6 +27,7 @@ spec:
         # Roll the pod when the settings seed changes; otherwise an edited
         # ConfigMap sits unapplied until something else triggers a restart.
         checksum/settings: {{ include (print $.Template.BasePath "/configmap-settings.yaml") . | sha256sum }}
+        checksum/gitconfig: {{ include (print $.Template.BasePath "/configmap-gitconfig.yaml") . | sha256sum }}
     spec:
       {{- if .Values.imagePullSecrets.enabled }}
       imagePullSecrets:
@@ -165,6 +166,14 @@ spec:
               subPath: ide-user
             - name: workspace
               mountPath: /workspace
+            {{- if or .Values.git.userName .Values.git.userEmail }}
+            # git's SYSTEM config. See configmap-gitconfig.yaml for why this
+            # is /etc/gitconfig and not ~/.gitconfig.
+            - name: gitconfig
+              mountPath: /etc/gitconfig
+              subPath: gitconfig
+              readOnly: true
+            {{- end }}
       volumes:
         - name: pi-data
           persistentVolumeClaim:
@@ -176,6 +185,12 @@ spec:
           configMap:
             name: {{ include "code-server.fullname" . }}-settings
             defaultMode: 0444
+        {{- if or .Values.git.userName .Values.git.userEmail }}
+        - name: gitconfig
+          configMap:
+            name: {{ include "code-server.fullname" . }}-gitconfig
+            defaultMode: 0444
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
