@@ -179,6 +179,11 @@ networkPolicy:
   extraCloudflaredApps: []
   # Let the `helm test` smoke pod reach the Service. Without it the policy
   # below denies the test pod and `helm test` fails on a healthy release.
+  #
+  # Note the start-up race it cannot fix: measured on woow-k3s, this cluster's
+  # policy controller programs a NEW pod's IP into the allow sets ~5-10s after
+  # the pod starts, so the first seconds of any new pod's traffic are denied.
+  # The smoke pod therefore retries /healthz instead of failing once.
   allowTestPod: true
   # Sources allowed to reach port 8080 directly. kubelet health probes come
   # from the node, not from a pod, so the node addresses must be listed.

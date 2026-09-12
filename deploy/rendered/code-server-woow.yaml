@@ -625,7 +625,18 @@ spec:
           set -e
           base="http://code-server.code-server.svc.cluster.local:8080"
           echo "==> code-server /healthz"
-          curl -fsS -o /dev/null -w 'GET /healthz -> %{http_code}\n' "${base}/healthz"
+          # Retry rather than fail on the first attempt. With networkPolicy
+          # enabled, a brand-new pod's own IP is not in the policy's allow set
+          # for the first seconds of its life (measured on woow-k3s: ~5-10s),
+          # so an un-retried curl reports a healthy release as broken.
+          for i in $(seq 1 24); do
+            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "${base}/healthz") || true
+            [ "${code}" = "200" ] && break
+            echo "   attempt ${i}: /healthz -> ${code}, retrying"
+            sleep 5
+          done
+          [ "${code}" = "200" ] || { echo "/healthz never returned 200"; exit 1; }
+          echo "GET /healthz -> ${code}"
           echo "==> code-server login page is served (password auth is on)"
           code=$(curl -s -o /tmp/login.html -w '%{http_code}' "${base}/login")
           echo "GET /login -> ${code}"

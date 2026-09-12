@@ -198,7 +198,7 @@ hook pod——那不屬於 release manifest）。
 - pi 唯一的憑證是 PVC 上 `/data/pi-agent/auth.json` 裡的 OAuth pair——任何在這個 namespace 有 `kubectl exec` 權限的人都讀得到。真正的管控是 `pods/exec` 的 RBAC。每日備份也會把它 tar 進去。
 - 每個 container 都設了 `automountServiceAccountToken: false`、`allowPrivilegeEscalation: false`、`capabilities: drop: [ALL]`。
 - VS Code 的 Workspace Trust 在種下的 settings 裡是**刻意關閉**的（ACP 側欄需要它關掉），所以任何 clone 下來的 repo 的 tasks 與 extension 行為都不會再問一次就直接信任。見 `PARITY_CONTRACT.md` §2.5。
-- `NetworkPolicy` 是選用的，而且線上實例是**關閉**的：這顆 pod 執行模型寫出來的程式，目前可以連到叢集其他地方和區網。打開後 ingress 只允許 tunnel、`helm test` pod 與節點 CIDR，egress 允許 DNS 加上網際網路（扣掉叢集自己的 CIDR）——請先在測試 namespace 確認 pi 需要的東西都還連得到。
+- `NetworkPolicy` 是選用的，而且線上實例是**關閉**的：這顆 pod 執行模型寫出來的程式，目前可以連到叢集其他地方和區網。打開後 ingress 只允許 tunnel、`helm test` pod 與節點 CIDR，egress 允許 DNS 加上網際網路（扣掉叢集自己的 CIDR）——請先在測試 namespace 確認 pi 需要的東西都還連得到。實測到一個細節：這個叢集的政策控制器大約在 pod 啟動後 5-10 秒才把它的 IP 寫進 allow 規則，所以任何在自己生命的第一秒就連線的東西（沒有重試的測試、剛被重新調度的 connector）會拿到連線被拒，然後才恢復。`helm test` 的 pod 就是因此改成重試。
 
 完整內容見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#security-posture)。
 
