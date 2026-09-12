@@ -27,6 +27,13 @@ spec:
             matchLabels:
               app: {{ . }}
         {{- end }}
+        {{- if .Values.networkPolicy.allowTestPod }}
+        # The `helm test` smoke pod (templates/tests/smoke.yaml).
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: smoke-test
+              app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- end }}
       ports:
         - port: {{ .Values.codeServer.port }}
     # kubelet health probes originate from the node, not from a pod.

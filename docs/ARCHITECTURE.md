@@ -50,9 +50,9 @@ This flag is defensive, not required: cloudflared already forwards the real `Hos
 
 ## Storage
 
-`persistence.storageClassName` has **no default** and the chart refuses to render without it. woow-k3s carries two StorageClasses both marked `(default)` — `local-path` and `longhorn` — so an omitted value is non-deterministic and would most likely bind node-local, unreplicated `local-path`; a rescheduled pod would silently come up with an empty store. This chart's own `values-woow.yaml` sets `longhorn` explicitly.
+`persistence.storageClassName` has **no default** and the chart refuses to render without it. woow-k3s carries two StorageClasses both marked `(default)` — `local-path` and `longhorn` — so an omitted value is non-deterministic and would most likely bind node-local, unreplicated `local-path`; a rescheduled pod would silently come up with an empty store. This chart's own `values/woow-k3s/code-server.yaml` sets `longhorn` explicitly.
 
-Two PVCs (`pi-data`, `workspace`) both carry `helm.sh/resource-policy: keep`, so `helm uninstall` never deletes them.
+All three PVCs (`pi-data`, `workspace`, and `backup` when enabled) carry `helm.sh/resource-policy: keep` while `keepOnUninstall` is `true`, so `helm uninstall` never deletes them. The chart renders no Namespace at all, so a release can never take its own namespace down with it.
 
 ## Backup
 

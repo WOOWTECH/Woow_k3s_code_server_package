@@ -7,6 +7,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="${NAMESPACE:-code-server}"
 CONTEXT="${KUBECTL_CONTEXT:-woow-k3s}"
+VALUES="${VALUES:-${REPO_DIR}/values/woow-k3s/code-server.yaml}"
 
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31mXX\033[0m %s\n' "$*" >&2; exit 1; }
@@ -25,15 +26,15 @@ kubectl -n "${NAMESPACE}" get secret code-server-cf-creds >/dev/null 2>&1 \
     || die "Secret code-server-cf-creds not found. Create it from the Cloudflare tunnel's credentials.json — see docs/DEPLOYMENT.md."
 
 say "Checking StorageClass"
-STORAGECLASS="$(python3 -c "import yaml,sys; print(yaml.safe_load(open('${REPO_DIR}/values-woow.yaml'))['persistence']['storageClassName'])" 2>/dev/null || echo "")"
-[ -n "${STORAGECLASS}" ] || die "persistence.storageClassName is empty in values-woow.yaml"
+STORAGECLASS="$(python3 -c "import yaml,sys; print(yaml.safe_load(open('${VALUES}'))['persistence']['storageClassName'])" 2>/dev/null || echo "")"
+[ -n "${STORAGECLASS}" ] || die "persistence.storageClassName is empty in ${VALUES}"
 kubectl get storageclass "${STORAGECLASS}" >/dev/null 2>&1 \
     || die "StorageClass ${STORAGECLASS} not found on this cluster"
 
 say "helm upgrade --install"
 helm upgrade --install code-server "${REPO_DIR}/charts/code-server" \
     --namespace "${NAMESPACE}" \
-    -f "${REPO_DIR}/values-woow.yaml" \
+    -f "${VALUES}" \
     --wait --timeout 5m
 
 say "Waiting for rollout"

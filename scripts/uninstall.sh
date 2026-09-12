@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Uninstall the code-server release. PVCs are KEPT by default (Longhorn
-# reclaim policy is Retain and every PVC carries helm.sh/resource-policy:
-# keep) — pass --purge to delete them too, after a confirmation prompt.
+# Uninstall the code-server release. PVCs are KEPT by default (the chart sets
+# helm.sh/resource-policy: keep on them while keepOnUninstall=true, and the
+# Longhorn StorageClass reclaim policy is Retain), the Secrets created out of
+# band are untouched, and the namespace is not a chart object either — pass
+# --purge to delete the PVCs too, after a confirmation prompt.
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-code-server}"
@@ -27,6 +29,6 @@ if [ "${PURGE}" -eq 1 ]; then
         say "Skipped — PVCs kept."
     fi
 else
-    say "Done. PVCs were NOT deleted:"
+    say "Done. The namespace, both Secrets and the PVCs were NOT deleted:"
     say "  kubectl -n ${NAMESPACE} delete pvc code-server-pi-data code-server-workspace code-server-backup"
 fi

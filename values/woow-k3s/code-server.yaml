@@ -1,10 +1,12 @@
-# WoowTech internal instance — namespace code-server, context woow-k3s.
+# Live instance: context woow-k3s, namespace code-server, release code-server.
+# This file is the source of truth for that release — `helm get values
+# code-server -n code-server` equals it, and `helm template ... -f this file`
+# equals `helm get manifest code-server -n code-server`.
 #
-# Secrets are NOT in this file. Create them out of band before installing —
-# see docs/DEPLOYMENT.md:
+# Secrets are NOT in this file and never should be. Create them out of band
+# before installing (see examples/secrets.example.yaml and docs/DEPLOYMENT.md):
 #   kubectl -n code-server create secret generic code-server-auth --from-literal=PASSWORD=...
 #   kubectl -n code-server create secret generic code-server-cf-creds --from-file=credentials.json=...
-#   kubectl -n code-server create secret docker-registry ghcr-woowtech --docker-server=ghcr.io ...   (only if the image package is private)
 
 image:
   repository: ghcr.io/woowtech/woow-code-server-amd64
@@ -16,9 +18,10 @@ image:
   # not the floating :main tag. Verified pullable ANONYMOUSLY (podman
   # logout ghcr.io; pull succeeded) — the package inherited public
   # visibility from the public source repo, so no imagePullSecret is
-  # needed after all (contrary to the chart's own conservative default
-  # below).
+  # needed.
   digest: "sha256:fa9d6eb67d47a14d00a5409df6dc540f73f9dfbf3ea1a506b79b6aa101005d9d"
+  # Ignored while digest is set (see _helpers.tpl) — recorded only to say
+  # which floating tag this digest was published under.
   tag: "main"
   pullPolicy: IfNotPresent
 
@@ -44,7 +47,6 @@ git:
 
 auth:
   existingSecret: code-server-auth
-  create: false
 
 persistence:
   # Explicit and required — see values.yaml's comment. woow-k3s carries TWO
@@ -61,17 +63,21 @@ persistence:
 
 cloudflare:
   enabled: true
-  # Tunnel created 2026-09-09 via the Cloudflare API (account
-  # 9c27f623ee596e0b67be56263bcb1974, zone woowtech.io). DNS CNAME
-  # code-server-woow-k3s.woowtech.io -> f36600ac-....cfargotunnel.com
-  # created in the same pass.
+  # Locally-managed tunnel created 2026-09-09 via the Cloudflare API (zone
+  # woowtech.io); the DNS CNAME code-server-woow-k3s.woowtech.io ->
+  # <tunnel>.cfargotunnel.com was created in the same pass. The credentials
+  # file lives only in Secret code-server-cf-creds.
   tunnelId: "f36600ac-2ebf-49b0-b878-74334944f3cb"
   existingCredentialsSecret: code-server-cf-creds
   hostname: code-server-woow-k3s.woowtech.io
   replicas: 2
 
 networkPolicy:
-  enabled: false   # matches house default (pi-agent-woow, omnigent); flip on when ready to harden
+  # OFF, exactly as the running release has always been. Turning it on is a
+  # runtime change for a live pod (see README "NetworkPolicy" and the PR
+  # follow-ups); it must be rolled out deliberately, not as a side effect of
+  # adopting this chart version.
+  enabled: false
 
 # resources / podSecurityContext left at chart defaults (4 CPU / 8Gi limits —
 # this cluster also hosts 16 production Odoo tenants, so limits are

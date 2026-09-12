@@ -1,3 +1,11 @@
+{{- /*
+`helm test` smoke pod. Read-only: it curls the Service's /healthz and the login
+page and touches nothing else, so it is safe to run against the live release.
+
+networkPolicy.allowTestPod keys off the component label below — with the policy
+on and that rule missing, this pod is denied and `helm test` fails on a
+perfectly healthy release.
+*/ -}}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -5,11 +13,20 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "code-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: smoke-test
   annotations:
     helm.sh/hook: test
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    # Kept until the next `helm test` so `helm test --logs` can always read it.
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: smoke
       image: curlimages/curl:8.11.1
@@ -18,7 +35,24 @@ spec:
         - -c
         - |
           set -e
+          base="http://{{ include "code-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.codeServer.port }}"
           echo "==> code-server /healthz"
-          curl -fsS -o /dev/null -w 'GET /healthz -> %{http_code}\n' \
-            "http://{{ include "code-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.codeServer.port }}/healthz"
+          curl -fsS -o /dev/null -w 'GET /healthz -> %{http_code}\n' "${base}/healthz"
+          echo "==> code-server login page is served (password auth is on)"
+          code=$(curl -s -o /tmp/login.html -w '%{http_code}' "${base}/login")
+          echo "GET /login -> ${code}"
+          [ "${code}" = "200" ] || { echo "expected 200 from /login"; exit 1; }
+          grep -qi 'password' /tmp/login.html || { echo "/login has no password field"; exit 1; }
           echo "smoke OK"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi

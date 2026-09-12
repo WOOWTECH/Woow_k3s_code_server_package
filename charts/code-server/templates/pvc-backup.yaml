@@ -6,8 +6,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "code-server.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/resource-policy: keep
+  {{- include "code-server.keepAnnotations" . | nindent 2 }}
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: {{ required "persistence.storageClassName must be set explicitly" .Values.persistence.storageClassName }}

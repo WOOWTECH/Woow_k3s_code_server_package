@@ -158,7 +158,7 @@ Every row is a command. Define the target adapter first:
 CX(){ podman exec -u coder code-server "$@"; }
 BASE=http://127.0.0.1:8443            # 127.0.0.1, not the LAN IP — see P31
 
-# --- HA (run from /home/woowtechcluster1/woow-code-server-align) ---
+# --- HA (run from the local three-platform alignment checkout) ---
 HAC=$(./sshha.sh 'docker ps --format "{{.Names}}" | grep woow_ha_code_server' | tr -d '\r')
 CX(){ ./sshha.sh "docker exec $HAC $*"; }
 BASE=https://woowtech-ha.woowtech.io/api/hassio_ingress/<token>   # needs an ingress_session cookie
@@ -443,7 +443,7 @@ Consequences, binding on all three targets:
 One PR set, same day, three repos, in this order:
 
 1. `Woow_podman_code_server_package`: bump the `ARG` in `Containerfile`, regenerate `rootfs/SHA256SUMS`, run the three smoke tests against a rebuilt image, tag → CI publishes `ghcr.io/woowtech/woow-code-server-{amd64,arm64}:<ver>`.
-2. `Woow_k3s_code_server_package`: bump `image.digest` in `values-woow.yaml`, `helm template` → `deploy/rendered/`, `helm upgrade`, run smoke tests.
+2. `Woow_k3s_code_server_package`: bump `image.digest` in `values/woow-k3s/code-server.yaml`, `helm template` → `deploy/rendered/`, `helm upgrade`, run smoke tests.
 3. `Woow_ha_code_server_add_on`: bump the matching `ARG`s + `version:` in `config.yaml`, CHANGELOG entry, tag `vX.Y.Z` → CI publishes both arches → store sync picks it up.
 4. Bump this file's version and the §2 table in the same PR set.
 

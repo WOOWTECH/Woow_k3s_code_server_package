@@ -22,10 +22,34 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 app: {{ include "code-server.fullname" . }}
 {{- end -}}
 
+{{/*
+`annotations:` block carrying the keep policy, or nothing.
+
+Used on every object that must survive `helm uninstall`: the PVCs holding pi's
+login/sessions/skills and the workspace, and any Secret this chart creates
+itself. Uninstalling a release must never be how this data is lost — see
+README's uninstall section.
+*/}}
+{{- define "code-server.keepAnnotations" -}}
+{{- if .Values.keepOnUninstall -}}
+annotations:
+  helm.sh/resource-policy: keep
+{{- end -}}
+{{- end -}}
+
+{{/*
+The image reference.
+
+A digest wins over a tag whenever one is set (immutable, and what the live
+instance pins). The tag fallback sanitises .Chart.AppVersion: appVersion is
+"<code-server>+pi<pi>" and an OCI tag may not contain "+", so the raw value
+renders an image Kubernetes rejects with InvalidImageName. Same `replace` the
+helm.sh/chart label above already uses.
+*/}}
 {{- define "code-server.image" -}}
 {{- if .Values.image.digest -}}
 {{ .Values.image.repository }}@{{ .Values.image.digest }}
 {{- else -}}
-{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+{{ .Values.image.repository }}:{{ .Values.image.tag | default (.Chart.AppVersion | replace "+" "_") }}
 {{- end -}}
 {{- end -}}
