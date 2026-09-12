@@ -1,6 +1,10 @@
 # Default values for the code-server chart.
-# A per-team install should only need to override image.digest/tag,
-# persistence.storageClassName, and cloudflare.*.
+#
+# The defaults are deliberately NOT installable as-is: persistence.storageClassName
+# has no default (see below) and Secrets are never generated unless you ask for
+# them. A per-team install should only need to override image.digest,
+# persistence.storageClassName, secrets/auth.existingSecret and cloudflare.*.
+# The live WoowTech instance is values/woow-k3s/code-server.yaml.
 #
 # Shared contract: PI_CODING_AGENT_VERSION, PI_ACP_VERSION, ACP_CLIENT_VERSION
 # and the pi state layout are pinned across this chart, Woow_podman_code_server_package
@@ -10,11 +14,18 @@
 nameOverride: ""
 fullnameOverride: ""
 
-namespace:
-  # false by default, matching house convention (Woow_k3s_pi_agent_package):
-  # the operator creates the namespace explicitly per docs/DEPLOYMENT.md,
-  # rather than the chart owning namespace lifecycle.
-  create: false
+# helm.sh/resource-policy: keep on every object that holds state — the pi-data,
+# workspace and backup PVCs, and any Secret this chart creates. `helm uninstall`
+# then leaves the data (and the pi login) behind; scripts/uninstall.sh prints
+# the explicit kubectl command for the rare case you really do want it gone.
+# Turn this off only for throwaway test releases you intend to delete cleanly.
+keepOnUninstall: true
+
+# The chart renders NO Namespace. Helm keeps its release record in the release
+# namespace, so a chart-owned Namespace makes `helm uninstall` able to delete
+# the namespace — and with it the kept PVCs above. Create it out of band:
+#   kubectl --context woow-k3s create namespace code-server
+#   (or: helm upgrade --install ... --create-namespace)
 
 image:
   # This chart consumes the SAME image the podman package builds and tests —
@@ -22,19 +33,20 @@ image:
   # pi 0.83.0, pi-acp 0.0.33, ACP Client 0.2.0, pi-code, pi.sh, pi-seed, the
   # settings seed) physically cannot drift between podman and k3s.
   repository: ghcr.io/woowtech/woow-code-server-amd64
-  # Prefer digest (immutable) over tag. Left empty until the podman package's
-  # CI has actually published a build — see docs/DEPLOYMENT.md.
+  # Prefer digest (immutable) over tag — the live instance pins one, published
+  # by Woow_podman_code_server_package's build.yml. With both empty the chart
+  # falls back to appVersion with "+" replaced by "_" (an OCI tag may not
+  # contain "+"); that tag is only a placeholder, pin a digest for real use.
   digest: ""
   tag: ""
   pullPolicy: IfNotPresent
 
-# Set true if the ghcr.io/woowtech package is private. woow-k3s-pi-agent is
-# public and needs none; this defaults to true because a newly pushed GHCR
-# package defaults to private and there is no cluster-wide pull credential
-# to fall back on — better to render the reference than to ImagePullBackOff
-# silently. Flip to false once the package is confirmed public.
+# Only needed if the ghcr.io/woowtech package is private. It is not: GHCR
+# packages inherit their source repo's visibility, and an anonymous pull of the
+# pinned digest succeeds (verified 2026-09-09). Off by default so a fresh
+# install does not reference a Secret that does not exist.
 imagePullSecrets:
-  enabled: true
+  enabled: false
   name: ghcr-woowtech
 
 timezone: Asia/Taipei
@@ -78,14 +90,26 @@ codeServer:
       cpu: "4"
       memory: 8Gi
 
-# code-server's own auth. `create: false` by default — the operator creates
-# this Secret out of band (see docs/DEPLOYMENT.md). Never the literal
-# "woowtech" the podman quadlet uses for its LAN default: this k3s exposure
-# is a public Cloudflare hostname.
+# code-server's own auth: the PASSWORD key of an existing Secret. The Secret
+# itself is created out of band (see examples/secrets.example.yaml) unless you
+# set secrets.create=true below.
 auth:
   existingSecret: code-server-auth
+
+# Secret generation. OFF by default: the chart references Secrets that already
+# exist, so an upgrade can never overwrite a real password or a real tunnel
+# credential, and no secret value has to live in a values file. Every key is
+# documented with placeholders in examples/secrets.example.yaml.
+#
+# With create=true the values below are required() — there is no default and no
+# weak fallback, because this deployment is reachable on a public hostname.
+secrets:
   create: false
-  password: ""   # only used when create: true — a real deployment should not set this in values
+  # -> Secret {auth.existingSecret}, key PASSWORD
+  authPassword: ""
+  # -> Secret {fullname}-cf-creds, key credentials.json (the locally-managed
+  # tunnel's credentials file, verbatim). Use --set-file, never a committed file.
+  cloudflareCredentialsJson: ""
 
 persistence:
   # NEVER omit — this cluster carries TWO StorageClasses both marked
@@ -110,14 +134,16 @@ backup:
   keep: 7
 
 cloudflare:
-  enabled: true
+  # OFF by default: a chart default must never try to start a connector, and a
+  # test install has no tunnel of its own. The live instance sets this true
+  # together with tunnelId, hostname and existingCredentialsSecret.
+  enabled: false
   image: cloudflare/cloudflared:2026.7.3
   # Tunnel UUID (locally-managed tunnel) — required when enabled. Routing
   # lives in this chart, not the Cloudflare dashboard.
   tunnelId: ""
-  # Contents of the tunnel credentials JSON. Supply via --set-file or an
-  # existing secret; never commit it.
-  credentialsJson: ""
+  # Name of an existing Secret holding credentials.json. Required when
+  # cloudflare.enabled=true unless secrets.create=true generates it.
   existingCredentialsSecret: ""
   hostname: ""   # e.g. code-server-woow-k3s.woowtech.io
   # Extra ingress rules appended to this tunnel's routing table verbatim —
@@ -141,13 +167,32 @@ cloudflare:
 # chart's own single tenant. Revisit only if a second code-server release
 # ever needs to share this namespace.
 
+# Lateral-movement containment for a pod whose whole job is running
+# model-authored code. OPT-IN: enabling it on a running instance adds a
+# NetworkPolicy that the live pod has never been subject to, so it is a
+# runtime change and stays off until it is rolled out deliberately (with the
+# egress allow-list checked against what pi actually reaches).
 networkPolicy:
   enabled: false
   # Additional cloudflared Deployments allowed to reach this release, by
   # their `app` label — only needed if this tunnel is ever shared.
   extraCloudflaredApps: []
+  # Let the `helm test` smoke pod reach the Service. Without it the policy
+  # below denies the test pod and `helm test` fails on a healthy release.
+  #
+  # Note the start-up race it cannot fix: measured on woow-k3s, this cluster's
+  # policy controller programs a NEW pod's IP into the allow sets ~5-10s after
+  # the pod starts, so the first seconds of any new pod's traffic are denied.
+  # The smoke pod therefore retries /healthz instead of failing once.
+  allowTestPod: true
+  # Sources allowed to reach port 8080 directly. kubelet health probes come
+  # from the node, not from a pod, so the node addresses must be listed.
+  # woow-k3s nodes are 192.168.10.21-24: a /24 covers them, where the former
+  # /16 default also admitted 255 other subnets.
   nodeCIDRs:
-    - 192.168.0.0/16
+    - 192.168.10.0/24
+  # Carved out of the "allow the internet" egress rule below: the pod cluster
+  # CIDR, the Service CIDR, the whole LAN and the cloud metadata address.
   blockedCIDRs:
     - 10.42.0.0/16
     - 10.43.0.0/16

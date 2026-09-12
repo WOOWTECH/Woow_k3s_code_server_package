@@ -1,0 +1,25 @@
+code-server {{ .Chart.AppVersion }} — release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Image:   {{ include "code-server.image" . }}
+Storage: {{ .Values.persistence.storageClassName }} (pi-data {{ .Values.persistence.piData.size }}, workspace {{ .Values.persistence.workspace.size }}{{ if .Values.persistence.backup.enabled }}, backup {{ .Values.persistence.backup.size }}{{ end }})
+Auth:    password from Secret {{ .Values.auth.existingSecret }}, key PASSWORD{{ if .Values.secrets.create }} (created by this release){{ end }}
+{{ if .Values.cloudflare.enabled }}URL:     https://{{ .Values.cloudflare.hostname }} (tunnel {{ .Values.cloudflare.tunnelId }}){{ else }}URL:     no tunnel (cloudflare.enabled=false) — reach it with:
+         kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "code-server.fullname" . }} {{ .Values.codeServer.port }}:{{ .Values.codeServer.port }}{{ end }}
+
+Verify:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "code-server.fullname" . }}
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }} --logs
+
+First run (once per volume), authenticate pi:
+  kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "code-server.fullname" . }} -c code-server -- sh -lc 'pi login'
+{{ if not .Values.networkPolicy.enabled }}
+NetworkPolicy is OFF: this pod runs model-authored code and can currently reach
+the rest of the cluster and the LAN. See README's "NetworkPolicy" section before
+turning networkPolicy.enabled on — it is a runtime change.
+{{- end }}
+{{- if .Values.keepOnUninstall }}
+
+`helm uninstall {{ .Release.Name }}` keeps the PVCs (helm.sh/resource-policy:
+keep), so the pi login, sessions and workspace survive. scripts/uninstall.sh
+prints the kubectl command to delete them on purpose.
+{{- end }}

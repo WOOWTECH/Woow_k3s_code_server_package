@@ -1,6 +1,29 @@
-# Never commit secrets
-*.key
-*.pem
-credentials.json
-.env
+# Real secrets must never be committed — only examples/secrets.example.yaml.
+#
+# Every pattern is anchored with a leading "/" on purpose. An unanchored
+# pattern matches at any depth: "secrets.yaml" would also match
+# charts/code-server/templates/secrets.yaml and silently keep a chart template
+# out of git (the chart would then render without its Secret template and
+# nobody would notice until an install failed). The negation at the bottom is
+# a second belt for the same trousers.
+/credentials.json
+/*credentials.json
+/secrets.yaml
+/*-secrets.yaml
+/*.secret.yaml
+/*secrets.values.yaml
+/*.local.yaml
+/*.key
+/*.pem
+/.env
+/.env.*
+/*.env
+/kubeconfig
+/kubeconfig.*
+
+# Never ignore anything inside the chart.
+!/charts/**
+
+# Packaged charts and local render scratch
+/*.tgz
 .DS_Store

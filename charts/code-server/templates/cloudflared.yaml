@@ -1,19 +1,6 @@
 {{- if .Values.cloudflare.enabled }}
-{{- if not .Values.cloudflare.existingCredentialsSecret }}
-{{- if not .Values.cloudflare.credentialsJson }}
-{{- fail "set either cloudflare.credentialsJson (--set-file) or cloudflare.existingCredentialsSecret" }}
-{{- end }}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ include "code-server.fullname" . }}-cf-creds
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "code-server.labels" . | nindent 4 }}
-type: Opaque
-stringData:
-  credentials.json: {{ .Values.cloudflare.credentialsJson | quote }}
----
+{{- if and (not .Values.cloudflare.existingCredentialsSecret) (not .Values.secrets.create) }}
+{{- fail "cloudflare.enabled=true needs a credentials file: set cloudflare.existingCredentialsSecret, or secrets.create=true with --set-file secrets.cloudflareCredentialsJson=/path/to/credentials.json" }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

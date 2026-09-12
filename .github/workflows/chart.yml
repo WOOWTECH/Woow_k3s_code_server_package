@@ -3,23 +3,23 @@ name: chart
 on:
   push:
     branches: [main]
-    paths:
-      - "charts/**"
-      - "values-woow.yaml"
-      - ".github/workflows/chart.yml"
   pull_request:
-    paths:
-      - "charts/**"
-      - "values-woow.yaml"
-      - ".github/workflows/chart.yml"
   workflow_dispatch:
 
+# Read-only: this workflow validates, it does not commit back to the branch.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: chart-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  CHART: charts/code-server
+  INSTANCE: values/woow-k3s/code-server.yaml
+  # The live tunnel ID is instance data, not a credential, but CI has no
+  # business rendering it into an artifact: render with a placeholder.
+  PLACEHOLDER_TUNNEL: "00000000-0000-0000-0000-000000000000"
 
 jobs:
   lint-and-render:
@@ -33,60 +33,221 @@ jobs:
           version: v3.19.5
 
       - name: helm lint
-        run: helm lint charts/code-server -f values-woow.yaml
-
-      - name: helm template (placeholder tunnel ID — real one is created out of band)
-        run: |
-          mkdir -p deploy/rendered
-          helm template code-server charts/code-server \
-            --namespace code-server \
-            -f values-woow.yaml \
-            --set cloudflare.tunnelId=00000000-0000-0000-0000-000000000000 \
-            > deploy/rendered/code-server-woow.yaml
-
-      - name: Guard against committed credentials
         run: |
           set -e
-          file=deploy/rendered/code-server-woow.yaml
-          leak=0
-          if grep -nE 'PASSWORD: ' "$file"; then leak=1; fi
-          if grep -nE 'credentials\.json: \{' "$file"; then leak=1; fi
-          if grep -nE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----' "$file"; then leak=1; fi
-          if [ "$leak" -ne 0 ]; then
-            echo "::error::rendered manifest contains what looks like a credential; refusing to commit"
+          helm lint "$CHART" -f "$INSTANCE" --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL"
+          # Defaults alone are deliberately not installable (see "required()
+          # guards" below), so lint them with only the one value they need.
+          helm lint "$CHART" --set persistence.storageClassName=longhorn
+
+      - name: helm template (every values combination)
+        run: |
+          set -e
+          mkdir -p /tmp/render
+          SC=--set=persistence.storageClassName=longhorn
+
+          # 1. The live instance, with a placeholder tunnel ID.
+          helm template code-server "$CHART" -n code-server -f "$INSTANCE" \
+            --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL" \
+            > /tmp/render/instance.yaml
+
+          # 2. Defaults + the single required value: no tunnel, no backup, no
+          #    NetworkPolicy, no Secrets. This is the "fresh install" shape.
+          helm template code-server "$CHART" -n code-server $SC > /tmp/render/defaults.yaml
+
+          # 3. Everything on, including chart-generated Secrets from dummy values.
+          helm template code-server "$CHART" -n code-server $SC \
+            --set secrets.create=true \
+            --set secrets.authPassword=dummy-password \
+            --set secrets.cloudflareCredentialsJson='{"AccountTag":"dummy","TunnelID":"dummy","TunnelSecret":"dummy"}' \
+            --set cloudflare.enabled=true \
+            --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL" \
+            --set cloudflare.hostname=code-server.example.invalid \
+            --set persistence.backup.enabled=true \
+            --set networkPolicy.enabled=true \
+            --set git.userName=CI --set git.userEmail=ci@example.invalid \
+            --set imagePullSecrets.enabled=true \
+            > /tmp/render/full.yaml
+
+          # 4. Same, but referencing existing Secrets instead of creating them,
+          #    and with data-keeping turned off (throwaway test release).
+          helm template code-server "$CHART" -n code-server $SC \
+            --set cloudflare.enabled=true \
+            --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL" \
+            --set cloudflare.hostname=code-server.example.invalid \
+            --set cloudflare.existingCredentialsSecret=code-server-cf-creds \
+            --set keepOnUninstall=false \
+            --set persistence.backup.enabled=true \
+            > /tmp/render/existing-secrets.yaml
+
+          wc -l /tmp/render/*.yaml
+
+      - name: kubeconform (schema validation, -strict)
+        run: |
+          set -e
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -strict -summary /tmp/render/*.yaml
+
+      - name: Every template renders (no template silently dropped from git)
+        run: |
+          set -e
+          python3 - <<'PY'
+          import os, subprocess, sys
+          tracked = subprocess.check_output(
+              ["git", "ls-files", "charts/code-server/templates"], text=True).split()
+          # Every template file must be tracked AND present on disk.
+          on_disk = set()
+          for root, _, files in os.walk("charts/code-server/templates"):
+              for f in files:
+                  on_disk.add(os.path.join(root, f))
+          missing = on_disk - set(tracked)
+          if missing:
+              sys.exit("templates present on disk but NOT tracked by git: %s" % sorted(missing))
+          print("all %d templates tracked by git:" % len(tracked))
+          for t in sorted(tracked):
+              print("   ", t)
+          # Each object-producing template must appear as a "# Source:" line in
+          # the all-features render.
+          expect = {t for t in tracked
+                    if not os.path.basename(t).startswith("_")
+                    and os.path.basename(t) != "NOTES.txt"}
+          rendered = set()
+          for line in open("/tmp/render/full.yaml"):
+              if line.startswith("# Source: code-server/"):
+                  rendered.add("charts/code-server/" + line.split("code-server/", 1)[1].strip())
+          # tests/smoke.yaml is a hook; helm template includes it, keep it in the set.
+          gap = expect - rendered
+          if gap:
+              sys.exit("templates that produced nothing in the all-features render: %s" % sorted(gap))
+          print("every template produced at least one object")
+          PY
+
+      - name: required() / fail() guards fire
+        run: |
+          set -e
+          fails=0
+          try_render() {   # try_render <description> <extra helm args...>
+            desc="$1"; shift
+            if helm template code-server "$CHART" -n code-server "$@" >/dev/null 2>&1; then
+              echo "::error::$desc rendered but should have failed"; fails=1
+            else
+              echo "ok (failed as designed): $desc"
+            fi
+          }
+          try_render "defaults with no persistence.storageClassName"
+          try_render "secrets.create=true with no password" \
+            --set persistence.storageClassName=longhorn --set secrets.create=true
+          try_render "cloudflare.enabled=true with no tunnelId" \
+            --set persistence.storageClassName=longhorn --set cloudflare.enabled=true \
+            --set cloudflare.existingCredentialsSecret=x --set cloudflare.hostname=h
+          try_render "cloudflare.enabled=true with no hostname" \
+            --set persistence.storageClassName=longhorn --set cloudflare.enabled=true \
+            --set cloudflare.existingCredentialsSecret=x --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL"
+          try_render "cloudflare.enabled=true with no credentials source" \
+            --set persistence.storageClassName=longhorn --set cloudflare.enabled=true \
+            --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL" --set cloudflare.hostname=h
+          try_render "a values file still using the removed auth.create" \
+            --set persistence.storageClassName=longhorn --set auth.create=true
+          try_render "a values file still using the removed namespace.create" \
+            --set persistence.storageClassName=longhorn --set namespace.create=true
+          [ "$fails" -eq 0 ]
+
+      - name: Image tag is a valid OCI reference in every render
+        run: |
+          set -e
+          python3 - <<'PY'
+          import glob, re, sys
+          tag_re = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$")
+          bad, seen = [], set()
+          for f in glob.glob("/tmp/render/*.yaml"):
+              for line in open(f):
+                  line = line.strip()
+                  if not line.startswith("image:"):
+                      continue
+                  ref = line.split(":", 1)[1].strip()
+                  seen.add(ref)
+                  if "@" in ref:          # digest reference
+                      continue
+                  host_path, _, tag = ref.rpartition(":")
+                  if not host_path or "/" in tag:
+                      bad.append(f"{f}: {ref} has no tag")
+                  elif not tag_re.match(tag):
+                      bad.append(f"{f}: invalid OCI tag {tag!r} in {ref}")
+          for ref in sorted(seen):
+              print("   ", ref)
+          sys.exit("\n".join(bad)) if bad else print("every image reference is valid")
+          PY
+
+      - name: No secrets committed
+        run: |
+          set -e
+          python3 - <<'PY'
+          import sys, yaml
+          bad = []
+          v = yaml.safe_load(open("charts/code-server/values.yaml"))
+          if v["secrets"]["create"]:
+              bad.append("values.yaml secrets.create must default to false")
+          for k, val in v["secrets"].items():
+              if k != "create" and val:
+                  bad.append(f"values.yaml secrets.{k} must be empty, got {val!r}")
+          # Neither values file may carry secret material.
+          for path in ("charts/code-server/values.yaml", "values/woow-k3s/code-server.yaml"):
+              d = yaml.safe_load(open(path)) or {}
+              if (d.get("secrets") or {}).get("authPassword") or \
+                 (d.get("secrets") or {}).get("cloudflareCredentialsJson") or \
+                 (d.get("cloudflare") or {}).get("credentialsJson") or \
+                 (d.get("auth") or {}).get("password"):
+                  bad.append(f"{path} contains a secret value")
+          # The default and instance renders must not contain Secrets at all.
+          for f in ("/tmp/render/defaults.yaml", "/tmp/render/instance.yaml"):
+              for d in yaml.safe_load_all(open(f)):
+                  if d and d.get("kind") == "Secret":
+                      bad.append(f"{f} contains a Secret (secrets.create must default to false)")
+          # Examples must be placeholders only.
+          for d in yaml.safe_load_all(open("examples/secrets.example.yaml")):
+              for k, val in ((d or {}).get("stringData") or {}).items():
+                  if "REPLACE_ME" not in str(val):
+                      bad.append(f"examples: {d['metadata']['name']}.{k} is not a placeholder")
+          sys.exit("\n".join(bad)) if bad else print("no secrets committed")
+          PY
+          # Nothing anywhere in the tree may look like a real credential.
+          if grep -rInE --exclude-dir=.git \
+               -- '-----BEGIN [A-Z ]*PRIVATE KEY-----|"TunnelSecret"[[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=]{20,}' . ; then
+            echo "::error::something that looks like a credential is committed"; exit 1
+          fi
+          echo "no credential markers in the tree"
+
+      - name: deploy/rendered is up to date
+        run: |
+          set -e
+          helm template code-server "$CHART" -n code-server -f "$INSTANCE" \
+            --set cloudflare.tunnelId="$PLACEHOLDER_TUNNEL" \
+            > /tmp/rendered-now.yaml
+          if ! diff -u deploy/rendered/code-server-woow.yaml /tmp/rendered-now.yaml; then
+            echo "::error::deploy/rendered/code-server-woow.yaml is stale — re-run scripts/render.sh and commit it"
             exit 1
           fi
-          echo "no credential markers found in $file"
+          echo "deploy/rendered is in sync"
 
-      - name: "Shared-file hash check (source of truth: Woow_podman_code_server_package)"
-        # This chart does not vendor pi-code/pi.sh/pi-seed itself (it ships no
-        # image), but it DOES pin the same PI_CODING_AGENT_VERSION / etc as
-        # the other two repos in values.yaml. This step is a placeholder for
-        # a future check that fetches the podman repo's published
-        # rootfs/opt/SHA256SUMS and cross-checks the pinned image's
-        # `pi --version` once that image is public — see docs/DEPLOYMENT.md.
-        run: |
-          echo "pi.codingAgentVersion pinned in values.yaml:"
-          grep -A1 "^pi:" charts/code-server/values.yaml | grep codingAgentVersion
-
-      - name: Upload rendered manifest as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-server-woow-rendered
-          path: deploy/rendered/code-server-woow.yaml
-
-      - name: Commit rendered manifest back to main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: "Shared-file version pins (source of truth: Woow_podman_code_server_package)"
         run: |
           set -e
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deploy/rendered/code-server-woow.yaml
-          if git diff --cached --quiet; then
-            echo "no changes to rendered manifest; skipping commit"
-            exit 0
-          fi
-          git commit \
-            -m "chore(chart): re-render deploy/rendered/code-server-woow.yaml" \
-            -m "Auto-generated from charts/code-server + values-woow.yaml with cloudflare.tunnelId=<placeholder>. Source: ${{ github.sha }}"
-          git push
+          python3 - <<'PY'
+          import yaml
+          v = yaml.safe_load(open("charts/code-server/values.yaml"))
+          i = yaml.safe_load(open("values/woow-k3s/code-server.yaml"))
+          for key in ("codingAgentVersion", "acpVersion", "acpClientVersion"):
+              a, b = v["pi"][key], i["pi"][key]
+              assert a == b, f"pi.{key} differs: chart default {a} vs instance {b}"
+              print(f"pi.{key} = {a}")
+          PY
+
+      - name: Shell scripts parse
+        run: bash -n scripts/*.sh tests/*.sh tests/lib/*.sh
+
+      - name: Upload rendered manifests as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-server-rendered
+          path: /tmp/render/
