@@ -1,0 +1,128 @@
+# ── Image (platform helm_default_values pins tag@sha256) ──────────────────────
+# paas-odoo-ci code-server/: a thin PaaS layer on top of the WOOWTECH podman
+# image ghcr.io/woowtech/woow-code-server-amd64 (pinned by digest there).
+image:
+  repository: jcr-prod.woowtech.io/woow-paas-docker-local/code-server
+  tag: ""             # "" → .Chart.AppVersion (platform always overrides with a digest pin)
+  pullPolicy: IfNotPresent
+# operator forwards the tenant-ns pull secret (paas-registry).
+imagePullSecrets:
+  - name: paas-registry
+# per-instance, single replica (RWO PVCs + Recreate).
+replicaCount: 1
+timezone: Asia/Taipei
+
+# ── code-server ───────────────────────────────────────────────────────────────
+codeServer:
+  port: 8080
+  # Public https URL of this service. Injected by the platform (it alone knows
+  # the tenant host); its host is passed as --trusted-origins so the browser's
+  # Origin is accepted behind the tunnel. "" → no flag (local renders only).
+  publicUrl: ""
+  # UI language (the image ships the zh-hant language pack). "" → English.
+  locale: "zh-tw"
+  extraEnv: []
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+# ── pi defaults (seeded into settings.json only when absent) ─────────────────
+pi:
+  defaultProvider: "openai-codex"
+  defaultModel: ""
+
+# ── git identity for commits made in the IDE ─────────────────────────────────
+git:
+  userName: ""
+  userEmail: ""
+  # Hosts the optional auth.gitToken is offered to (git credential helper).
+  tokenHosts:
+    - https://github.com
+  tokenUsername: "x-access-token"
+
+# ── Tenant credential (platform has_admin_gui supply chain) ───────────────────
+config:
+  sensitive:
+    # The ONE tenant credential: code-server's login password. "" → self-generated
+    # once and persisted across helm upgrade via `lookup`. The platform pins it
+    # here via sensitive_values; reset/set = helm upgrade + rollout restart
+    # (admin_password_carrier = helm_secret).
+    admin_password: ""
+auth:
+  # CD/operator-provided Secret carrying key admin_password → chart renders no Secret.
+  existingSecret: ""
+  # Optional, set from the PaaS service page. Each becomes an env var from the
+  # chart Secret; empty = not set.
+  #   anthropicApiKey  → ANTHROPIC_API_KEY (Claude Code; otherwise `claude` login)
+  #   openrouterApiKey → OPENROUTER_API_KEY (pi), and — when no Anthropic key is
+  #                      set — Claude Code through OpenRouter's Anthropic API
+  #                      (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN)
+  #   gitToken         → GIT_TOKEN, offered by the git credential helper to git.tokenHosts
+  anthropicApiKey: ""
+  openrouterApiKey: ""
+  gitToken: ""
+
+# ── Service (ClusterIP-only; the tunnel entrance) ─────────────────────────────
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+# ── Persistence ───────────────────────────────────────────────────────────────
+# workspace: /workspace (the IDE's folder). piData: /data/pi-agent (pi + Claude
+# Code state) plus subPaths for the IDE user settings and runtime-installed
+# extensions. Sizes add up to CloudAppTemplate min_storage_gb (quota lockstep).
+persistence:
+  enabled: true
+  storageClass: ""     # platform-injected; "" = cluster default
+  accessModes: [ReadWriteOnce]
+  workspace:
+    size: 20Gi
+    existingClaim: ""
+  piData:
+    size: 5Gi
+    existingClaim: ""
+
+# ── NetworkPolicy (default-deny + explicit allow) ─────────────────────────────
+networkPolicy:
+  enabled: true
+  ingressNamespaces: []   # empty = operator-baseline-governed (no chart ingress rule)
+  # Code the agents write runs in this pod: allow the internet (model APIs,
+  # package registries, git hosts) but not cluster or private networks.
+  # true = unrestricted egress (not recommended).
+  allowAllEgress: false
+  # Allow egress to pods in this namespace (e.g. an Omnigent service in the same
+  # workspace, for `omnigent host` over the in-cluster address).
+  sameNamespaceEgress: true
+
+# ── Pod hardening ─────────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+terminationGracePeriodSeconds: 60
+serviceAccount:
+  create: true
+  name: ""
+  automountToken: false   # the pod never talks to the K8s API
+nodeSelector:
+  kubernetes.io/arch: amd64
+affinity: {}
+tolerations: []
+podLabels: {}
+podAnnotations: {}
+nameOverride: ""
+fullnameOverride: ""

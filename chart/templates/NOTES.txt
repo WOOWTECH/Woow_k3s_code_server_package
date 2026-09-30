@@ -1,0 +1,14 @@
+code-server {{ .Chart.AppVersion }} — release {{ .Release.Name }} in {{ .Release.Namespace }}
+
+Entrance: Service {{ include "code-server.fullname" . }}:{{ .Values.service.port }} (platform tunnel).
+{{- with .Values.codeServer.publicUrl }}
+Public URL: {{ . }}
+{{- end }}
+
+Login: code-server's own password page. The password is the tenant credential
+shown once at creation; reset or change it from the PaaS service page
+("Admin Credentials") — saving restarts the pod.
+
+Built in: pi (terminal `pi` + the ACP chat sidebar) and Claude Code (terminal
+`claude`, the sidebar's "claude" agent, and the extension). Sign in once per
+agent in the terminal (`pi login`, `claude`), or set API keys on the service page.

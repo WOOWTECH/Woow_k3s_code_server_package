@@ -6,9 +6,9 @@
 
 | | |
 |---|---|
-| Version | 1.0 (2026-09-10) |
+| Version | **1.2 (2026-10-01)** — the **k3s leg becomes the WOOW PaaS code-server cloud service** (per-tenant chart + a thin PaaS layer on the podman image); no §2 value changes. Changes are listed in §9. 1.1 (2026-09-30) moved the baseline to code-server 4.139.1, pi 0.99.1, pi-acp 0.0.34 and added Claude Code; 1.0 was 2026-09-10. |
 | Baseline | `Woow_podman_code_server_package` @ `2df94fc` — parity is levelled **UP** to this feature set |
-| Targets | `Woow_podman_code_server_package` (exists), `Woow_ha_code_server_add_on` (new), `Woow_k3s_code_server_package` (new) |
+| Targets | `Woow_podman_code_server_package`, `Woow_ha_code_server_add_on`, `Woow_k3s_code_server_package` (since 1.2 a read-only mirror of the WOOW PaaS code-server cloud service; source of truth on the internal Gitea) |
 | Authority | Where this file and a recon report, a README, or `docs/K3S_BLUEPRINT.md` disagree, **this file wins.** `docs/K3S_BLUEPRINT.md` is stale (StatefulSet / ingress-nginx / oauth2-proxy / Velero) and is superseded here by the realized `Woow_k3s_pi_agent_package` + `opendesign-2.0.0` house style. |
 | Change control | Any change to §2 or §3 is one PR per repo, opened the same day, referencing the same contract version bump. A target may not ship a §2 value the other two do not have. |
 
@@ -37,13 +37,16 @@ These are identical on every platform. A target that cannot reach one of these v
 
 | Key | Value | Notes |
 |---|---|---|
-| `CODE_SERVER_VERSION` | `4.135.0` | Code `1.135.0`, commit `de89acbcdce9d9b870008a270c9f6466993d91f4`. Already true on podman **and** on the live HA add-on. |
-| `PI_CODING_AGENT_VERSION` | `0.83.0` | npm `@earendil-works/pi-coding-agent@0.83.0`. **Not** 0.74.2 (HA live, unpinned accident) and **not** 0.85.1 (HA pi-agent add-on). 0.83.0 is the only version observed working end to end with `pi-acp@0.0.33` + `acp-client@0.2.0` (real ACP transcripts exist under `sessions/--workspace--/`). Bumping it is a separate, three-repo, single-PR operation. |
-| `PI_ACP_VERSION` | `0.0.33` | npm `pi-acp@0.0.33`. 0.0.x — expect churn; pin hard. |
+| `CODE_SERVER_VERSION` | `4.139.1` | Code `1.139.1`. Matches the HA base `hassio-addons/vscode` v7.2.0, which ships 4.139.1 (its Dockerfile `CODE_SERVER_VERSION`). |
+| `PI_CODING_AGENT_VERSION` | `0.99.1` | npm `@earendil-works/pi-coding-agent@0.99.1`. Bumped with `pi-acp@0.0.34` + `acp-client@0.2.0` in 1.1; `patches/fix-unicode-space-paths.mjs` still patches both `path-utils.js` call sites. Bumping it is a three-repo, same-day operation (§8). |
+| `PI_ACP_VERSION` | `0.0.34` | npm `pi-acp@0.0.34`. 0.0.x — expect churn; pin hard. |
+| `CLAUDE_CODE_VERSION` | `2.1.285` | npm `@anthropic-ai/claude-code@2.1.285` (native binary via its optionalDependencies). Installed in npm's default prefix like pi. Self-update off (`DISABLE_AUTOUPDATER=1`). |
+| `CLAUDE_AGENT_ACP_VERSION` | `0.84.0` | npm `@agentclientprotocol/claude-agent-acp@0.84.0` — the ACP adapter the sidebar's `claude` agent runs. |
+| `CLAUDE_CODE_EXTENSION_VERSION` | `2.1.285` | `anthropic.claude-code`, from **open-vsx only**, per-platform build (linux-x64 / linux-arm64). |
 | `ACP_CLIENT_VERSION` | `0.2.0` | `formulahendry.acp-client`, fetched from **open-vsx only**. |
 | `NODE_MAJOR` | `22` | pi runs as a subprocess and needs Node ≥ 22. code-server's own bundled Node is never touched. |
 | Extension gallery | `https://open-vsx.org/vscode/gallery` / `https://open-vsx.org/vscode/item` | MS Marketplace ToS forbids third-party clients. Never `marketplace.visualstudio.com`. |
-| Installed extension set | exactly `formulahendry.acp-client@0.2.0` (+ whatever the platform's base image already ships) | No other ACP adapter is pre-configured. Claude Code / Codex / Gemini stay visible-but-unwired, deliberately. |
+| Installed extension set | exactly `formulahendry.acp-client@0.2.0` + `anthropic.claude-code@2.1.285` (+ whatever the platform's base image already ships) | Two ACP adapters are pre-configured: `pi` and `claude`. Codex / Gemini stay visible-but-unwired, deliberately. |
 
 ### 2.2 pi data directory layout (identical on all three)
 
@@ -54,6 +57,7 @@ These are identical on every platform. A target that cannot reach one of these v
 ├── settings.json      0600            #   {defaultProvider, defaultModel, packages[], theme}
 ├── models.json        0600            #   provider overrides; {"providers":{}} today
 ├── models-store.json  0600            #   refetchable catalogue cache — never migrated, never backed up
+├── claude/            0700            #   CLAUDE_CONFIG_DIR (1.1): Claude Code login + settings + .claude.json, shared by terminal claude, the sidebar agent and the extension
 ├── home/                              #   $HOME of the pi subprocess (set by pi-code ONLY)
 │   └── .pi/
 │       ├── agent/skills -> ../../skills
@@ -72,6 +76,8 @@ Image also ships `/opt/pi-agent-skel/` — the canonical empty skeleton (`home/.
 | `PI_CODING_AGENT_DIR` | `/data/pi-agent` | container env **and** `/etc/profile.d/pi.sh` |
 | `PI_TELEMETRY` | `0` | container env + `pi.sh` + `pi-code` |
 | `PI_SKIP_VERSION_CHECK` | `1` | container env + `pi.sh` + `pi-code` |
+| `CLAUDE_CONFIG_DIR` | `/data/pi-agent/claude` | container env **and** `/etc/profile.d/claude.sh` (1.1). Must reach the code-server process so the extension host, the sidebar adapter and the Claude Code extension all inherit it. |
+| `DISABLE_AUTOUPDATER` | `1` | container env + `claude.sh` (1.1) |
 | `TZ` | `Asia/Taipei` | container env |
 | `LANG`, `LC_ALL` | `C.UTF-8` | container env |
 | `HOME` (pi subprocess only) | `/data/pi-agent/home` | exported **inside `pi-code` only**. Never globally — overriding the IDE's HOME breaks code-server's own config/extension lookups. |
@@ -88,15 +94,19 @@ Each repo vendors these at the same paths. CI in every repo asserts the sha256 a
 | `/usr/local/bin/pi-code` | `3c39a8ad4934210fb34fffdf5a6fb9640994c843845f4ed5c48cce508ec64e73` | the **only** ACP entrypoint. exits `78` if `$PI_AGENT_DATA_DIR` is not a dir; exports `HOME`, `PI_CODING_AGENT_DIR`, `PI_TELEMETRY`, `PI_SKIP_VERSION_CHECK`, and `GIT_CONFIG_GLOBAL` (pointed at the **login** HOME's `.gitconfig`, captured before `HOME` is overwritten — see P45); `exec pi-acp "$@"`. |
 | `/etc/profile.d/pi.sh` | `8be97cdabbf7998db582b64382e5e4c5bc01ef494b967d6131c35772c60d4116` | terminal-pi env. Exports the three PI_* vars, deliberately **not** `HOME`. |
 | `/usr/local/bin/pi-seed` | `bbba98a7a123b76950c9f9f6ebd1250e01dcfa098b8353574722d4867ea5b18a` | idempotent `cp -an /opt/pi-agent-skel/. "$PI_AGENT_DATA_DIR"/` + `chmod 700` + optional `settings.json` defaults from `PI_DEFAULT_PROVIDER`/`PI_DEFAULT_MODEL`. Never overwrites. |
-| `settings.json` seed | `399023d568a078ec528f74c0bd3a872a1b50cc6a8b5c00126da9209f836775c6` (podman/k3s form) | see §2.5. |
+| `/etc/profile.d/claude.sh` | `40cb570db992ef5bc64c8712cbf325d260268643ae2860ce51c104b6b4deb6b8` | terminal-claude env (1.1): `CLAUDE_CONFIG_DIR` + `DISABLE_AUTOUPDATER`. |
+| `settings.json` seed | `00fab09d47e6015e28df5322e928e17ff6499d44266b4d014fc69239ca5e312a` (podman form; 1.0 was `399023d5…`; HA and k3s merge the seven keys of §2.5 instead of seeding this file) | see §2.5. |
 
 ### 2.5 Required VS Code settings keys
 
-Seven keys are load-bearing and must be present with these exact values, whatever the file path (§3):
+Seven keys are load-bearing and must be present with these exact values, whatever the file path (§3). 1.1 adds the `claude` agent:
 
 ```json
 {
-  "acp.agents": { "pi": { "command": "pi-code", "args": [], "env": {} } },
+  "acp.agents": {
+    "pi":     { "command": "pi-code",          "args": [], "env": {} },
+    "claude": { "command": "claude-agent-acp", "args": [], "env": {} }
+  },
   "security.workspace.trust.enabled": false,
   "security.workspace.trust.startupPrompt": "never",
   "security.workspace.trust.banner": "never",
@@ -107,14 +117,16 @@ Seven keys are load-bearing and must be present with these exact values, whateve
 
 `acp.agents.pi.command` is the **bare name** `pi-code`, resolved via `PATH`. Any platform that overrides `PATH` must keep `/usr/local/bin` on it. Workspace Trust must be off on all four keys: the ACP Client extension declares no `untrustedWorkspaces.supported`, so under Restricted Mode its view container never activates and the sidebar icon silently never appears.
 
-Cosmetic, aligned on podman/k3s only (see §6): `workbench.colorTheme: "Default Dark Modern"`, `terminal.integrated.defaultProfile.linux: "bash"`, `files.exclude` for `**/.git`, `**/.DS_Store`, `**/node_modules`.
+Cosmetic, podman only since 1.2 (HA and k3s merge only the seven keys; see §6): `workbench.colorTheme: "Default Dark Modern"`, `terminal.integrated.defaultProfile.linux: "bash"`, `files.exclude` for `**/.git`, `**/.DS_Store`, `**/node_modules`.
 
 ### 2.6 Wrapper / binary names on `PATH`
 
 | Name | Resolves to | Present on |
 |---|---|---|
-| `pi` | pi CLI 0.83.0 | all three |
-| `pi-acp` | pi-acp 0.0.33 | all three |
+| `pi` | pi CLI 0.99.1 | all three |
+| `pi-acp` | pi-acp 0.0.34 | all three |
+| `claude` | Claude Code CLI 2.1.285 | all three (1.1) |
+| `claude-agent-acp` | claude-agent-acp 0.84.0 | all three (1.1) |
 | `pi-code` | `/usr/local/bin/pi-code` | all three |
 | `pi-seed` | `/usr/local/bin/pi-seed` | all three |
 | `node` | Node 22.x | all three |
@@ -130,22 +142,22 @@ Cosmetic, aligned on podman/k3s only (see §6): `workbench.colorTheme: "Default 
 
 | Value | podman | HA add-on | k3s | Why it cannot be identical |
 |---|---|---|---|---|
-| Listening port | `8080` (published `0.0.0.0:8443`) | `1337` | `8080` (Service `8080`) | HA Supervisor ingress is wired to upstream's `ingress_port: 1337` and its `code-server/run` hardcodes `--port 1337`. Changing it would mean replacing upstream's s6 run script. |
-| Workspace path | `/workspace` ← host `~/Desktop` | `/share/projects` (option `config_path`) | `/workspace` ← Longhorn PVC | HA has no host bind; `/share` is the supervisor-granted, HA-visible surface and is already where the live add-on points. |
+| Listening port | `8080` (published `127.0.0.1:18443` by default; `CODE_SERVER_BIND`/`CODE_SERVER_PORT`) | `1337` | `8080` (Service `8080`) | HA Supervisor ingress is wired to upstream's `ingress_port: 1337` and its `code-server/run` hardcodes `--port 1337`. Changing it would mean replacing upstream's s6 run script. |
+| Workspace path | `/workspace` ← host `~/Desktop` | `/share/projects` (option `config_path`) | `/workspace` ← Longhorn PVC `<release>-code-server-workspace` (20 Gi) | HA has no host bind; `/share` is the supervisor-granted, HA-visible surface and is already where the live add-on points. |
 | How the folder is fixed | quadlet `WorkingDir=/workspace` | add-on option `config_path` (upstream's `code-server/run` `cd`s there and passes it positionally) | pod `workingDir: /workspace` | upstream `codercom` entrypoint hardcodes `code-server --bind-addr 0.0.0.0:8080 .`; only the CWD is honoured. HA's upstream run script takes the folder as an argument. |
 | Run user / `HOME` | `coder` uid 1000, `HOME=/home/coder` | `root` uid 0, `HOME=/root` | `coder` uid 1000, `HOME=/home/coder` | HA add-ons run as root by supervisor convention; the upstream image is built that way. |
 | VS Code user-data dir | `/home/coder/.local/share/code-server` | `/data/vscode` (upstream passes `--user-data-dir /data/vscode`) | `/home/coder/.local/share/code-server` | fixed by upstream's run script on HA. |
 | settings.json path | `/home/coder/.local/share/code-server/User/settings.json` | `/data/vscode/User/settings.json` | same as podman | follows the user-data dir. |
 | How settings get there | baked in the image (`/etc/skel` **and** the real path) | s6 oneshot `init-woow` seeds from `/root/.code-server/settings.json` if absent, then **idempotent `jq` merge** of the seven keys | initContainer seeds from ConfigMap if absent, then the same `jq` merge | HA's `/data/vscode` pre-exists on upgrade and upstream's hash-based default-upgrade mechanism (`PREVIOUS_DEFAULT_CONFIG_HASHES`) would ignore a new image default. The merge sidesteps it and preserves user edits. |
-| Extension install mechanism | `code-server --install-extension` at build | unpack the open-vsx `.vsix` into `/usr/local/lib/code-server/lib/vscode/extensions/formulahendry.acp-client-0.2.0` **and** append `formulahendry.acp-client#0.2.0` to `/root/vscode.extensions` | same as podman (same image) | upstream's `init-code-server` purges `/data/vscode/extensions/<id>*` for every line in `vscode.extensions` on each boot, so a `/data`-installed copy would delete itself; the builtin dir is the only stable slot. |
-| Node 22 source | NodeSource apt `node_22.x` | official `nodejs.org` tarball → `/opt/node22`, symlinks in `/usr/local/bin` | same image as podman | upstream vscode image exact-pins Debian 13 apt versions and ships **no** system node; a tarball avoids fighting those pins and avoids an untested NodeSource-on-trixie path. |
-| pi state persistence | internal named volume `woow-code-server-pi-data` → `/data/pi-agent` | add-on `/data/pi-agent` (supervisor-managed persistent dir) | Longhorn PVC `code-server-pi-data` → `/data/pi-agent` | different storage substrates; the **mount path is identical and that is what the contract requires**. |
-| IDE user-data persistence | internal volume `woow-code-server-ide` → `/home/coder/.local/share/code-server/User` | already persistent (`/data/vscode`) | PVC subPath `ide-user` → same path | — |
-| Front door | code-server `PASSWORD` (env), plain HTTP `:8443` | HA Supervisor ingress, `--auth none` | Cloudflare Tunnel → ClusterIP; `PASSWORD` from a k8s Secret | one authenticated gate per platform; the mechanism differs, the property does not. |
-| Credential storage | quadlet `EnvironmentFile=` (not committed) | none (HA session is the gate) | Secret `code-server-auth`, key `PASSWORD` | never a literal in git. |
+| Extension install mechanism | `code-server --install-extension` at build | unpack the open-vsx `.vsix` into `/usr/local/lib/code-server/lib/vscode/extensions/formulahendry.acp-client-0.2.0` **and** append `formulahendry.acp-client#0.2.0` to `/root/vscode.extensions` | podman's build-time install, then the PaaS image layer moves the pinned extensions (and the zh-hant language pack) into the built-in dir `/usr/lib/code-server/lib/vscode/extensions` | upstream's `init-code-server` purges `/data/vscode/extensions/<id>*` for every line in `vscode.extensions` on each boot, so a `/data`-installed copy would delete itself; the builtin dir is the only stable slot. On k3s (PaaS) the user extensions dir is on the tenant volume (runtime installs persist, §6), so a user-dir copy of a pinned extension would be hidden by the mount. |
+| Node 22 source | NodeSource apt `node_22.x` | official `nodejs.org` tarball → `/opt/node22`, symlinks in `/usr/local/bin` | the podman image (the PaaS layer builds on it) | upstream vscode image exact-pins Debian 13 apt versions and ships **no** system node; a tarball avoids fighting those pins and avoids an untested NodeSource-on-trixie path. |
+| pi state persistence | internal named volume `woow-code-server-pi-data` → `/data/pi-agent` | add-on `/data/pi-agent` (supervisor-managed persistent dir) | Longhorn PVC `<release>-code-server-pi-data` (5 Gi) → `/data/pi-agent` | different storage substrates; the **mount path is identical and that is what the contract requires**. |
+| IDE user-data persistence | internal volume `woow-code-server-ide` → `/home/coder/.local/share/code-server/User` | already persistent (`/data/vscode`) | pi-data PVC subPath `ide-user` → same path | — |
+| Front door | code-server password (a YAML config from the podman secret `code-server-config`, read through `$CODE_SERVER_CONFIG`), loopback HTTP plus an SSH forward, the optional tailscale sidecar (tailnet HTTPS) or a same-host proxy | HA Supervisor ingress, `--auth none` | PaaS Cloudflare tunnel subdomain → ClusterIP; code-server's own password (`PASSWORD` from a k8s Secret); `--trusted-origins` = the public host | one authenticated gate per platform; the mechanism differs, the property does not. |
+| Credential storage | podman secret `code-server-config`, mounted read-only (never in the unit, `podman inspect` or the create command) | none (HA session is the gate) | Secret `<release>-code-server-secret`, key `admin_password`, managed by the PaaS platform (shown once at launch; reset or tenant-set from the service page) | never a literal in git. |
 | Supervision | Quadlet `Restart=always` + health timer | HA Supervisor + `watchdog:` | Deployment + kubelet probes | the systemd health timer has **no** counterpart elsewhere and must not be recreated. |
-| Image | `ghcr.io/woowtech/woow-code-server-<arch>:<ver>` | `ghcr.io/woowtech/woow-ha-code-server-{arch}:<ver>` | **the podman image**, `ghcr.io/woowtech/woow-code-server-amd64`, pinned by digest | HA must layer on `ghcr.io/hassio-addons/vscode/<arch>:7.0.0` to keep ingress + s6 + `ha` CLI + the 8 vendored extensions; podman and k3s can and must share one image so the pi layer cannot drift. |
-| Public hostname | none (LAN `:8443`) | `https://woowtech-ha.woowtech.io/api/hassio_ingress/<token>/` | `https://code-server-woow-k3s.woowtech.io` | — |
+| Image | `localhost/woow-code-server:<VERSION>`, built locally by `scripts/install.sh` (`Pull=never`); the GHCR `main-<sha>` images from build.yml are not consumed by the podman target | `ghcr.io/woowtech/woow-ha-code-server-{arch}:<ver>` | `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:<tag>@sha256:…` — a thin PaaS layer (`woow-paas/paas-odoo-ci` `code-server/`) on **the podman image** `ghcr.io/woowtech/woow-code-server-amd64`, consumed by digest through its JCR mirror | HA must layer on `ghcr.io/hassio-addons/vscode/<arch>:7.2.0` to keep ingress + s6 + `ha` CLI + the 8 vendored extensions; podman and k3s can and must share one base image so the pi layer cannot drift; the PaaS layer adds only non-§2 extras (§6). |
+| Public hostname | none by default (loopback `:18443`); optionally `https://<TS_HOSTNAME>.<tailnet>.ts.net/` through the tailscale sidecar | `https://woowtech-ha.woowtech.io/api/hassio_ingress/<token>/` | per tenant, `https://paas-cs-<workspace>-<id>.woowtech.io` | — |
 
 ---
 
@@ -156,36 +168,37 @@ Every row is a command. Define the target adapter first:
 ```bash
 # --- podman ---
 CX(){ podman exec -u coder code-server "$@"; }
-BASE=http://127.0.0.1:8443            # 127.0.0.1, not the LAN IP — see P31
+BASE=http://127.0.0.1:18443           # the install default; loopback is a secure context — see P31
 
-# --- HA (run from the local three-platform alignment checkout) ---
+# --- HA (run from /home/woowtechcluster1/woow-code-server-align) ---
 HAC=$(./sshha.sh 'docker ps --format "{{.Names}}" | grep woow_ha_code_server' | tr -d '\r')
 CX(){ ./sshha.sh "docker exec $HAC $*"; }
 BASE=https://woowtech-ha.woowtech.io/api/hassio_ingress/<token>   # needs an ingress_session cookie
 
-# --- k3s ---
-CX(){ kubectl --context woow-k3s -n code-server exec deploy/code-server -c code-server -- "$@"; }
-BASE=https://code-server-woow-k3s.woowtech.io
+# --- k3s (WOOW PaaS cloud service: one Helm release per tenant) ---
+NS=paas-ws-<workspace>; REL=svc-<id>   # the service page's Namespace / Helm Release
+CX(){ kubectl -n "$NS" exec "deploy/$REL-code-server" -c code-server -- "$@"; }
+BASE=https://paas-cs-<workspace>-<id>.woowtech.io
 ```
 
 ### A. Identity and versions
 
 | # | Assertion | Command | Expected |
 |---|---|---|---|
-| P01 | code-server version | `CX code-server --version \| head -1` | starts `4.135.0`, contains `with Code 1.135.0` |
-| P02 | pi version | `CX pi --version` | `0.83.0` exactly |
+| P01 | code-server version | `CX code-server --version \| head -1` | starts `4.139.1`, contains `with Code 1.139.1` |
+| P02 | pi version | `CX pi --version` | `0.99.1` exactly |
 | P03 | pi-acp on PATH | `CX sh -c 'command -v pi-acp'` | non-empty |
-| P04 | pi-acp version | `CX sh -c 'pi-acp --version 2>/dev/null \|\| npm ls -g --depth 0 pi-acp'` | contains `0.0.33` |
+| P04 | pi-acp version | `CX sh -c 'pi-acp --version 2>/dev/null \|\| npm ls -g --depth 0 pi-acp'` | contains `0.0.34` |
 | P05 | Node ≥ 22 | `CX node --version` | `v22.` prefix |
 | P06 | Timezone | `CX sh -c 'echo $TZ; date +%Z'` | `Asia/Taipei` / `CST` |
-| P07 | Base tooling | `CX sh -c 'for b in git ssh jq curl python3 python pip3 node npm pi pi-acp pi-code pi-seed; do command -v $b >/dev/null \|\| echo MISSING:$b; done'` | empty output |
+| P07 | Base tooling | `CX sh -c 'for b in git ssh jq curl python3 python pip3 node npm pi pi-acp pi-code pi-seed claude claude-agent-acp; do command -v $b >/dev/null \|\| echo MISSING:$b; done'` | empty output |
 
 ### B. Extension + ACP wiring
 
 | # | Assertion | Command | Expected |
 |---|---|---|---|
 | P08 | Extension installed at the pin | `CX code-server --list-extensions --show-versions \| grep -x 'formulahendry.acp-client@0.2.0'` | one match |
-| P09 | Only one ACP adapter configured | `CX jq -r '.["acp.agents"] \| keys \| join(",")' "$SETTINGS"` | `pi` |
+| P09 | Exactly the two ACP adapters | `CX jq -r '.["acp.agents"] \| keys \| join(",")' "$SETTINGS"` | `claude,pi` |
 | P10 | ACP command is `pi-code` | `CX jq -e '.["acp.agents"].pi.command=="pi-code"' "$SETTINGS"` | exit 0 |
 | P11 | Workspace Trust fully off (4 keys) | `CX jq -e '.["security.workspace.trust.enabled"]==false and .["security.workspace.trust.startupPrompt"]=="never" and .["security.workspace.trust.banner"]=="never" and .["security.workspace.trust.emptyWindow"]==false' "$SETTINGS"` | exit 0 |
 | P12 | Extension auto-update off | `CX jq -e '.["extensions.autoUpdate"]=="off"' "$SETTINGS"` | exit 0 — **the string `"off"`, not `false`**. code-server 4.135.0 declares this setting as `{type:"string", enum:["on","off"], default:"on"}` and decides with `getAutoUpdateValue() !== "off"`, so a boolean leaves auto-update ON. |
@@ -195,6 +208,11 @@ BASE=https://code-server-woow-k3s.woowtech.io
 | P16 | `pi-code` execs the adapter, not pi | `CX grep -c '^exec pi-acp' /usr/local/bin/pi-code` | `1` |
 | P17 | `pi-code` guard fires when the store is gone | `CX sh -c 'PI_AGENT_DATA_DIR=/nonexistent pi-code; echo $?'` | `78` |
 | P18 | `/usr/local/bin` is on the extension host PATH | `CX sh -c 'echo $PATH \| tr : "\n" \| grep -qx /usr/local/bin'` | exit 0 |
+| P40 | Claude Code version (1.1) | `CX sh -lc 'claude --version'` | starts `2.1.285` |
+| P41 | Claude extension at the pin (1.1) | `CX code-server --list-extensions --show-versions \| grep -x 'anthropic.claude-code@2.1.285'` | one match |
+| P42 | Sidebar claude agent (1.1) | `CX jq -e '.[\"acp.agents\"].claude.command==\"claude-agent-acp\"' \"$SETTINGS\"` | exit 0 |
+| P43 | Claude state on the pi volume (1.1) | `CX sh -lc 'echo $CLAUDE_CONFIG_DIR; stat -c %a \"$CLAUDE_CONFIG_DIR\"'` | `/data/pi-agent/claude` / `700` |
+| P44 | claude.sh byte-identical (1.1) | `CX sha256sum /etc/profile.d/claude.sh` | `40cb570db992ef5bc64c8712cbf325d260268643ae2860ce51c104b6b4deb6b8` |
 
 `$SETTINGS` = `/home/coder/.local/share/code-server/User/settings.json` (podman, k3s) or `/data/vscode/User/settings.json` (HA).
 
@@ -217,14 +235,14 @@ BASE=https://code-server-woow-k3s.woowtech.io
 | P26 | Store exists and is writable by the run user | `CX sh -c 'test -d /data/pi-agent && test -w /data/pi-agent'` | exit 0 |
 | P27 | Store was seeded | `CX sh -c 'test -f /data/pi-agent/.woow-pi-store && test -d /data/pi-agent/home && test -d /data/pi-agent/sessions && test -d /data/pi-agent/skills'` | exit 0 |
 | P28 | Credential present and private | `CX sh -c 'test -r /data/pi-agent/auth.json && stat -c %a /data/pi-agent/auth.json'` | `600` |
-| P29 | **No cross-deployment sharing** | podman: `podman inspect code-server --format '{{range .Mounts}}{{.Name}} {{end}}' \| grep -c pi-agent-data` → `0`; k3s: `kubectl -n code-server get pvc code-server-pi-data -o jsonpath='{.spec.accessModes}'` → `["ReadWriteOnce"]`; HA: `CX sh -c 'ls /data/pi-agent'` reads the add-on's own `/data`, unreachable from any other add-on | no shared store |
+| P29 | **No cross-deployment sharing** | podman: `podman inspect code-server --format '{{range .Mounts}}{{.Name}} {{end}}' \| grep -c pi-agent-data` → `0`; k3s: `kubectl -n $NS get pvc $REL-code-server-pi-data -o jsonpath='{.spec.accessModes}'` → `["ReadWriteOnce"]`; HA: `CX sh -c 'ls /data/pi-agent'` reads the add-on's own `/data`, unreachable from any other add-on | no shared store |
 | P30 | State survives recreation | recreate the container/pod, then re-run **P27 + P28** | both still pass |
 
 ### E. Transport and the chat webview
 
 | # | Assertion | Command | Expected |
 |---|---|---|---|
-| P31 | Origin is a secure context | browser at `$BASE`, console: `window.isSecureContext` | `true` (HA/k3s via trusted cert; podman only via `http://127.0.0.1:8443`) |
+| P31 | Origin is a secure context | browser at `$BASE`, console: `window.isSecureContext` | `true` (HA/k3s via trusted cert; podman via `http://127.0.0.1:18443` or the optional tailscale sidecar) |
 | P32 `GATE` | Webview ServiceWorker registers | browser console: `navigator.serviceWorker.getRegistrations().then(r=>console.log(r.map(x=>x.scope)))` | includes a scope ending `/stable-de89acbcdce9d9b870008a270c9f6466993d91f4/static/out/vs/workbench/contrib/webview/browser/pre/` |
 | P33 `GATE` | Chat webview renders and round-trips | open the ACP sidebar, send "say ok" | a reply renders; console free of `'crypto.subtle' is not available` and `Could not register service worker: SecurityError` |
 | P34 | The webview host is served | `curl -o /dev/null -w '%{http_code}' "$BASE/stable-de89acbcdce9d9b870008a270c9f6466993d91f4/static/out/vs/workbench/contrib/webview/browser/pre/service-worker.js"` | `200` |
@@ -362,7 +380,7 @@ below ~60 s** — that, not the 100 s figure, is the real margin.
 
 - A target may be tagged **PARITY-A** when P01–P30 + P38–P44 pass.
 - A target may be tagged **PARITY-FULL** only when P31–P37 also pass.
-- podman is expected to be **PARITY-A** and PARITY-FULL only from `127.0.0.1` until a trusted-cert front door is decided (§7, open fork).
+- podman is expected to be **PARITY-A**, and PARITY-FULL from `127.0.0.1` (or through the optional tailscale sidecar, which gives a browser-trusted tailnet certificate; `scripts/install.sh --with-tailscale`).
 - HA ships **PARITY-A** in `0.1.0`; `0.2.0` claims PARITY-FULL only after P32/P33 are observed in a browser, otherwise the §5.2 fallback ladder applies.
 - **P45–P51 (§H below) are part of PARITY-A.** Every one of them exists because something shipped broken and no existing check caught it.
 
@@ -393,14 +411,16 @@ Reason: the wrapper contract (`pi-code`, `pi.sh`, the `~/.pi` symlink) all hardc
 
 ### 5.2 `Woow_ha_code_server_add_on` — new, layered
 
-Layer on `ghcr.io/hassio-addons/vscode/{arch}:7.0.0` so HA ingress, s6-rc, the `ha` CLI, oh-my-zsh and the 8 vendored extensions keep working untouched. Add: Node 22, pi, pi-acp, the ACP extension into the *builtin* extensions dir, the three shared rootfs files, one s6 oneshot (`init-woow`) that seeds the store, `jq`-merges the seven settings keys and publishes the PI_* env into `/run/s6/container_environment/`, and one dependency edge so it runs before `init-code-server`.
+Layer on `ghcr.io/hassio-addons/vscode/{arch}:7.2.0` so HA ingress, s6-rc, the `ha` CLI, oh-my-zsh and the 8 vendored extensions keep working untouched. Add: Node 22, pi, pi-acp, the ACP extension into the *builtin* extensions dir, the three shared rootfs files, one s6 oneshot (`init-woow`) that seeds the store, `jq`-merges the seven settings keys and publishes the PI_* env into `/run/s6/container_environment/`, and one dependency edge so it runs before `init-code-server`.
 Reason: the entire pi wiring today lives in unversioned supervisor options (`packages` + 7 `init_commands`) that vanish on any options reset, install network failures abort the whole add-on, and the install is unpinned so it froze at pi 0.74.2 forever.
 **Do not** copy the pi-agent add-on's `nginx.conf`. code-server emits relative URLs and needs no prefix rewriting; that shim also stubs out `navigator.serviceWorker`, which would guarantee a blank chat panel (P37).
 
-### 5.3 `Woow_k3s_code_server_package` — new, chart-only
+### 5.3 `Woow_k3s_code_server_package` — read-only mirror of the PaaS cloud service (since 1.2)
 
-Helm chart `charts/code-server` following `Woow_k3s_pi_agent_package` (Deployment + own cloudflared Deployment with git-tracked ingress rules + rendered manifest committed + credential-grep in CI) at the `opendesign-2.0.0` hardening bar (digest-pinned image, `automountServiceAccountToken: false`, `allowPrivilegeEscalation: false`, `capabilities: drop: [ALL]`).
-No image build in this repo: it consumes `ghcr.io/woowtech/woow-code-server-amd64` from the podman repo, pinned by digest. One image, zero drift, and the cluster is amd64-only.
+Source of truth on the internal Gitea: `woow-paas/woow-paas-charts` `charts/code-server` (the chart) and `woow-paas/paas-odoo-ci` `code-server/` (the image layer); this repo mirrors both byte-for-byte (`chart/`, `image/`, `MIRROR.md`, `scripts/sync-from-gitea.sh`).
+Chart: one release per tenant with release-prefixed names; two PVCs (workspace, pi-data); code-server's own password from the platform-managed Secret (a password change never changes the pod template); a `pi-seed` initContainer that seeds `/data/pi-agent` and `jq`-merges the seven §2.5 keys; default-deny NetworkPolicy (DNS + public internet + same namespace); non-root, `capabilities: drop: [ALL]`, `allowPrivilegeEscalation: false`, `automountServiceAccountToken: false`; RWO + `Recreate`; no backup CronJob.
+Image: a thin layer on the podman image (by digest), adding only the §6 PaaS extras; built, verified and published by `paas-odoo-ci` behind a prod approval gate. One base image, zero drift in the §2 set; the cluster is amd64-only.
+The 1.0/1.1 single-instance chart (`charts/code-server` with its own cloudflared, namespace `code-server`, `code-server-woow-k3s.woowtech.io`) is preserved on the repo's `legacy/k3s-single-instance` branch and `legacy-v0.1.0` tag; that deployment was retired in favour of the PaaS service.
 
 ---
 
@@ -412,13 +432,15 @@ No image build in this repo: it consumes `ghcr.io/woowtech/woow-code-server-amd6
 | `~/.ssh` and `~/.gitconfig` host mounts | podman only | HA's analogue is `/data/.ssh` + `/data/git/.gitconfig` (created by upstream `init-user`); k3s uses projected Secrets. Also non-functional on the podman host today: `.gitconfig` is 0 bytes (so `git commit` fails with "Please tell me who you are") and `.ssh` has no private key. Both READMEs currently claim otherwise and must be corrected. |
 | `SUDO_PASSWORD` / in-IDE `sudo` | podman only | HA runs as root (moot); k3s drops all capabilities and runs non-root by design. |
 | Default terminal shell | podman/k3s `bash`; HA keeps upstream `zsh` + oh-my-zsh | On HA the PI_* env comes from `/run/s6/container_environment`, inherited by every shell, so shell choice no longer affects agent state. Forcing bash would throw away upstream's nicer terminal for no parity gain. |
-| Runtime-installed extensions surviving recreation | HA yes (upstream persists `/data/vscode/extensions`); podman/k3s no | On podman/k3s only `User/` is persisted; extensions stay image-owned so the pinned set is deterministic. Matches `extensions.autoUpdate: "off"`. |
+| Runtime-installed extensions surviving recreation | HA yes (upstream persists `/data/vscode/extensions`); k3s (PaaS) yes (user extensions dir on the pi-data PVC); podman no | On podman only `User/` is persisted. On HA and k3s the pinned extensions live in the built-in dir, so the pinned set stays image-owned and deterministic whatever the tenant installs. Matches `extensions.autoUpdate: "off"`. |
 | Cross-deployment session visibility | **removed everywhere** | This was the point of the shared volume. After the cut, code-server's `sessions/--workspace--/` is private. pi-web and open-design keep their own; nothing else regresses (they each declare the mount independently). |
 | `models-store.json` | never migrated, never backed up | Refetchable provider catalogue cache. |
 | Shared pi credential across the three deployments | **not aligned, by design** | `auth.json` is an OAuth pair whose refresh token is rewritten by whichever pi refreshes first. One `pi login` per deployment (§7). "The user does not have to log in again" is explicitly **out of scope**. |
 | The systemd health timer | podman only | kubelet probes and the HA watchdog already do this; recreating it elsewhere is dead scaffolding. |
 | nginx / ingress path-prefix shim | none of the three | code-server is prefix-agnostic (`serverBasePath:"."`, `rootEndpoint:"."`, all assets relative) and HA Supervisor strips the prefix before proxying. The only nginx anywhere in this trio is the **optional** HA `direct_port` front (§ ha_design F2), and it does no body rewriting. |
-| Registering with omnigent (`omni host`) | not done | The k3s pi-agents do it; this trio's pi is standalone, matching the podman/HA baseline. |
+| Registering with omnigent (`omnigent host`) | podman/HA not done; k3s (PaaS) ships the `omnigent` CLI but never starts it | On the PaaS the tenant runs `omnigent login <url>` + `omnigent host` themselves to join an Omnigent service; its state lives in `/data/pi-agent/omnigent` (`OMNIGENT_CONFIG_HOME` / `OMNIGENT_DATA_DIR`). pi stays standalone otherwise. |
+| Traditional Chinese UI | k3s (PaaS) only | The PaaS image carries the zh-hant language pack as a built-in extension (with its `languagepacks.json` registration) and the chart passes `--locale zh-tw`. |
+| Platform-managed password, optional Anthropic / OpenRouter keys and Git token | k3s (PaaS) only | Set from the PaaS service page into the chart Secret; podman and HA keep their own front doors (§3). |
 | `pi-agent-env.sh` sourcing in the pi wrapper | dropped | The pi-agent add-on's `/usr/local/bin/pi` sources a file it does not ship. This trio uses the real `pi` binary on PATH; no launcher shim, no silent no-op. |
 
 ---
@@ -432,9 +454,10 @@ Consequences, binding on all three targets:
 1. **`auth.json` is mutable state, not a secret to mount.** pi rewrites it on refresh. It must live on the RW persistent store, never on a read-only Secret/ConfigMap projection.
 2. **Default provisioning = one interactive `pi login` per deployment**, run once in that deployment's own terminal. Three deployments, three logins. This is the only design that is safe under rotating refresh tokens.
 3. **Copying `auth.json` between deployments is opt-in and warned.** A refresh in one copy may invalidate the others. `scripts/migrate-pi-state.sh` exists for the podman cut-over but defaults to *not* copying `auth.json`.
-4. **API-key providers are supported but not required.** If a key-based provider is ever adopted, it is injected as `models.json` `providers.*` by `pi-seed` from `PI_PROVIDER_KEYS_JSON` (k3s Secret / HA option / podman `EnvironmentFile`). Nothing to do today.
+4. **API-key providers are supported but not required.** If a key-based provider is ever adopted, it is injected as `models.json` `providers.*` by `pi-seed` from `PI_PROVIDER_KEYS_JSON` (k3s Secret / HA option / a podman secret added to the podman unit). Nothing to do today.
 5. **Model/provider defaults are seeded, not copied.** `pi-seed` writes `settings.json` `{defaultProvider, defaultModel}` only if the file is absent, from `PI_DEFAULT_PROVIDER` / `PI_DEFAULT_MODEL` (all three packages seed `openai-codex` / `gpt-5.6-sol`). **Do not expect the live machines to match that.** Because the seed is write-if-absent and `pi login` writes `settings.json` itself about a second after `auth.json`, whoever ran the login picked the live value: as of the 2026-09 field test k3s was on `gpt-5.6-terra` and podman/HA on `gpt-5.5`, i.e. none of the three ran the seeded value. That is by design, not drift — but it means **any cross-platform comparison must pin the model explicitly** (`pi --model <m>`), or differences get misattributed to packaging.
 6. **The `woowtech-odoo-mcp` package** referenced by the live `settings.json` `packages[]` is pi-web state that code-server inherited by accident. It is **not** part of the parity set. If it is wanted later, it is added as an explicit `pi-seed` input, not by copying a `pi-cwd-*` worktree.
+7. **Claude Code (1.1) follows the same rules.** Its login lives in `$CLAUDE_CONFIG_DIR` (`/data/pi-agent/claude`), is rewritten on refresh, and is **one `claude` login per deployment** in that deployment's own terminal — never copied between deployments by default. An API key is the platform-specific alternative (`ANTHROPIC_API_KEY` env: k3s = the PaaS service page's optional key, which lands in the chart Secret / HA option / podman env file); nothing is required for the image to start.
 
 ---
 
@@ -443,9 +466,28 @@ Consequences, binding on all three targets:
 One PR set, same day, three repos, in this order:
 
 1. `Woow_podman_code_server_package`: bump the `ARG` in `Containerfile`, regenerate `rootfs/SHA256SUMS`, run the three smoke tests against a rebuilt image, tag → CI publishes `ghcr.io/woowtech/woow-code-server-{amd64,arm64}:<ver>`.
-2. `Woow_k3s_code_server_package`: bump `image.digest` in `values/woow-k3s/code-server.yaml`, `helm template` → `deploy/rendered/`, `helm upgrade`, run smoke tests.
+2. k3s (PaaS): copy the new podman image into JCR (`paas-odoo-ci` `mirror-image.yml`), bump `ARG BASE` in `paas-odoo-ci` `code-server/Dockerfile` (and its verify step's version assertions), build + approve, pin the new `code-server:<tag>@sha256` in the platform template (and the chart if it changes), smoke-test a tenant instance, then run `scripts/sync-from-gitea.sh` in `Woow_k3s_code_server_package`.
 3. `Woow_ha_code_server_add_on`: bump the matching `ARG`s + `version:` in `config.yaml`, CHANGELOG entry, tag `vX.Y.Z` → CI publishes both arches → store sync picks it up.
 4. Bump this file's version and the §2 table in the same PR set.
 
 Never bump one target alone. The old lockstep rationale ("the shared volume schema must not drift") is gone, but a new one replaces it: **this contract is the only thing keeping the three from diverging.**
 
+---
+
+## 9. Contract changelog
+
+### 1.2 — 2026-10-01
+
+- **The k3s leg is now the WOOW PaaS code-server cloud service.** `Woow_k3s_code_server_package` becomes a read-only mirror of `woow-paas/woow-paas-charts` `charts/code-server` + `woow-paas/paas-odoo-ci` `code-server/`; the single-instance chart and its `code-server-woow-k3s.woowtech.io` deployment are retired (branch `legacy/k3s-single-instance`, tag `legacy-v0.1.0`).
+- No §2 value changes: the PaaS image is the podman image (by digest) plus a thin layer.
+- §3 k3s column rewritten (per-tenant names, platform-managed password Secret, PaaS image, tunnel subdomain, built-in extension dir); §2.5 notes that only podman seeds the full `settings.json` (HA and k3s merge the seven keys).
+- §4 k3s adapter takes the tenant namespace and release; P29 uses the release-prefixed PVC.
+- §6: k3s now keeps runtime-installed extensions; new PaaS-only rows (zh-TW UI, platform-managed password and optional keys); the omnigent row reflects the bundled but not auto-started CLI.
+- §8 step 2 is the PaaS image/pin procedure.
+
+### 1.1 — 2026-09-30
+
+- `CODE_SERVER_VERSION` 4.135.0 → **4.139.1** (Code 1.139.1; the HA base `hassio-addons/vscode` moves 7.0.0 → 7.2.0, which ships 4.139.1).
+- `PI_CODING_AGENT_VERSION` 0.83.0 → **0.99.1**; `PI_ACP_VERSION` 0.0.33 → **0.0.34**.
+- **Claude Code joins the baseline**: `claude` CLI 2.1.285, `claude-agent-acp` 0.84.0 as the sidebar's second agent, extension `anthropic.claude-code` 2.1.285. State in `CLAUDE_CONFIG_DIR=/data/pi-agent/claude` (new skeleton dir, 0700). New shared file `/etc/profile.d/claude.sh`; new `settings.json` seed hash; checklist rows P40–P44; §7 item 7.
+- Existing deployments keep their own `settings.json` (code-server only seeds an empty one): add the `claude` agent to `acp.agents` by hand when upgrading an existing install.

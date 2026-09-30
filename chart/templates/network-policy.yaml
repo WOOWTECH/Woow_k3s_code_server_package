@@ -1,0 +1,64 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "code-server.fullname" . }}-default-deny
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "code-server.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "code-server.fullname" . }}-allow
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "code-server.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    {{- with .Values.networkPolicy.ingressNamespaces }}
+    - ports:
+        - protocol: TCP
+          port: {{ $.Values.service.targetPort }}
+      from:
+        {{- range . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . | quote }}
+        {{- end }}
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    {{- if .Values.networkPolicy.allowAllEgress }}
+    - {}
+    {{- else }}
+    # The public internet on any port (model APIs, package registries, git over
+    # https and ssh), but not the cluster or private networks: code the agents
+    # write runs in this pod.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+    {{- if .Values.networkPolicy.sameNamespaceEgress }}
+    # Services in this workspace's own namespace (e.g. an Omnigent service, for
+    # `omnigent host` over the in-cluster address).
+    - to:
+        - podSelector: {}
+    {{- end }}
+    {{- end }}
+{{- end }}
