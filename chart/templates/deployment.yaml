@@ -1,0 +1,231 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "code-server.fullname" . }}
+  labels:
+    {{- include "code-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # RWO PVCs → Recreate (RollingUpdate would Multi-Attach-deadlock the volumes).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "code-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "code-server.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/settings: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        # Restart when an optional key changes (platform "update settings").
+        # admin_password is deliberately NOT hashed here: a password reset must
+        # leave the pod template untouched (the platform restarts the pod itself
+        # after `helm upgrade`), or helm would wait for a new pod inside the
+        # reset's short --atomic budget and roll back.
+        checksum/optional-auth: {{ printf "%s|%s|%s" .Values.auth.anthropicApiKey .Values.auth.openrouterApiKey .Values.auth.gitToken | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "code-server.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Seed the pi + Claude Code state store (idempotent `cp -an` of the image
+        # skeleton, which also creates claude/ on volumes from older images) and
+        # merge the required settings keys into the IDE user settings — the same
+        # init the WOOWTECH k3s chart runs, so an existing settings.json gains new
+        # required keys (e.g. the claude agent) without losing the tenant's own.
+        - name: pi-seed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              /usr/local/bin/pi-seed
+              chmod 700 /data/pi-agent/claude 2>/dev/null || true
+              mkdir -p /ide /extensions
+              [ -f /ide/settings.json ] || cp /seed/settings.json /ide/settings.json
+              tmp=$(mktemp)
+              jq -S -s '.[0] * .[1]' /ide/settings.json /seed/settings.json > "$tmp" && mv "$tmp" /ide/settings.json
+          env:
+            - name: PI_AGENT_DATA_DIR
+              value: /data/pi-agent
+            - name: PI_DEFAULT_PROVIDER
+              value: {{ .Values.pi.defaultProvider | quote }}
+            - name: PI_DEFAULT_MODEL
+              value: {{ .Values.pi.defaultModel | quote }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          volumeMounts:
+            - name: pi-data
+              mountPath: /data/pi-agent
+            - name: pi-data
+              mountPath: /ide
+              subPath: ide-user
+            - name: pi-data
+              mountPath: /extensions
+              subPath: extensions
+            - name: settings
+              mountPath: /seed
+              readOnly: true
+      containers:
+        - name: code-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /workspace
+          # Appended to the image ENTRYPOINT (entrypoint.sh --bind-addr 0.0.0.0:8080 .).
+          {{- $origin := include "code-server.trustedOriginHost" . }}
+          {{- if or $origin .Values.codeServer.locale }}
+          args:
+            {{- with $origin }}
+            - --trusted-origins
+            - {{ . | quote }}
+            {{- end }}
+            {{- with .Values.codeServer.locale }}
+            - --locale
+            - {{ . | quote }}
+            {{- end }}
+          {{- end }}
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "code-server.secretName" . }}
+                  key: admin_password
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: PI_AGENT_DATA_DIR
+              value: /data/pi-agent
+            - name: PI_CODING_AGENT_DIR
+              value: /data/pi-agent
+            - name: PI_TELEMETRY
+              value: "0"
+            - name: PI_SKIP_VERSION_CHECK
+              value: "1"
+            - name: CLAUDE_CONFIG_DIR
+              value: /data/pi-agent/claude
+            - name: DISABLE_AUTOUPDATER
+              value: "1"
+            # Optional platform-supplied keys: absent key → env var unset.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "code-server.secretName" . }}
+                  key: anthropic_api_key
+                  optional: true
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "code-server.secretName" . }}
+                  key: openrouter_api_key
+                  optional: true
+            {{- if and .Values.auth.openrouterApiKey (not .Values.auth.anthropicApiKey) }}
+            # Claude Code through OpenRouter's Anthropic-compatible API (the key goes
+            # in ANTHROPIC_AUTH_TOKEN; ANTHROPIC_API_KEY must then be unset/empty).
+            - name: ANTHROPIC_BASE_URL
+              value: https://openrouter.ai/api
+            - name: ANTHROPIC_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "code-server.secretName" . }}
+                  key: openrouter_api_key
+            {{- end }}
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "code-server.secretName" . }}
+                  key: git_token
+                  optional: true
+            {{- with .Values.codeServer.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.codeServer.port }}
+              protocol: TCP
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.codeServer.resources | nindent 12 }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: pi-data
+              mountPath: /data/pi-agent
+            - name: pi-data
+              mountPath: /home/coder/.local/share/code-server/User
+              subPath: ide-user
+            # Runtime-installed extensions survive restarts (PaaS addition; the
+            # pinned extensions live in the image's built-in dir, not here).
+            - name: pi-data
+              mountPath: /home/coder/.local/share/code-server/extensions
+              subPath: extensions
+            - name: workspace
+              mountPath: /workspace
+            - name: settings
+              mountPath: /etc/gitconfig
+              subPath: gitconfig
+              readOnly: true
+      volumes:
+        - name: settings
+          configMap:
+            name: {{ include "code-server.fullname" . }}-settings
+            defaultMode: 0444
+        {{- if .Values.persistence.enabled }}
+        - name: pi-data
+          persistentVolumeClaim:
+            claimName: {{ include "code-server.piDataPvcName" . }}
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: {{ include "code-server.workspacePvcName" . }}
+        {{- else }}
+        - name: pi-data
+          emptyDir: {}
+        - name: workspace
+          emptyDir: {}
+        {{- end }}

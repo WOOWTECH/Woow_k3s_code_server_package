@@ -1,0 +1,23 @@
+{{- if .Values.persistence.enabled }}
+{{- range $vol := list "workspace" "piData" }}
+{{- $cfg := index $.Values.persistence $vol }}
+{{- if not $cfg.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ ternary (include "code-server.workspacePvcName" $) (include "code-server.piDataPvcName" $) (eq $vol "workspace") }}
+  labels:
+    {{- include "code-server.labels" $ | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml $.Values.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ $cfg.size }}
+  {{- with $.Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

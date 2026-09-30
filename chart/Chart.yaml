@@ -1,0 +1,40 @@
+apiVersion: v2
+name: code-server
+description: |
+  code-server (browser VS Code) cloud service chart, with the pi coding agent
+  and Claude Code built in.
+
+  A per-tenant IDE: code-server on port 8080 is the ONLY entrance, reached
+  through the platform Cloudflare tunnel. NO auth-proxy: code-server's own
+  password login is the gate (it has built-in login throttling: 2 attempts
+  per minute, 12 per hour). The password is the platform-supplied tenant
+  credential (config.sensitive.admin_password, helm_secret carrier): the
+  tenant resets or sets it from the PaaS service page, which re-renders the
+  chart Secret and restarts the pod. code-server has no username and no
+  in-app password change, so the platform is the only authority.
+
+  Built in (WOOWTECH code-server PARITY_CONTRACT 1.1 baseline): pi 0.99.1 +
+  pi-acp in the ACP chat sidebar and on the terminal PATH; Claude Code
+  2.1.285 as the sidebar's second agent (claude-agent-acp), on the terminal
+  PATH and as the official extension. PaaS additions on top of the baseline
+  (paas-odoo-ci code-server/ image layer): zh-TW language pack, runtime
+  extensions persisted on the volume, the omnigent CLI, optional API keys
+  and a Git token from the platform.
+
+  Derived from WOOWTECH/Woow_k3s_code_server_package (charts/code-server
+  0.1.0) and re-cut to the PaaS contract: release-prefixed names, no
+  cloudflared, no backup CronJob (the platform keeps the PVCs), non-root,
+  default-deny NetworkPolicy with internet-only egress.
+  Deployed per-tenant by paas-operator as svc-{ref[:8]} into a paas-ws-* namespace.
+type: application
+# 0.1.0 = first cut (code-server 4.139.1, pi 0.99.1, Claude Code 2.1.285).
+version: 0.1.0
+appVersion: "4.139.1"
+keywords: [paas, code-server, vscode, ide, pi-agent, claude-code, cloud-service]
+maintainers:
+  - name: WOOW PaaS Team
+home: https://git-prod.woowtech.io/woow-paas/woow-paas-charts
+sources:
+  - https://git-prod.woowtech.io/woow-paas/woow-paas-charts
+  - https://github.com/WOOWTECH/Woow_podman_code_server_package
+  - https://github.com/WOOWTECH/Woow_k3s_code_server_package
