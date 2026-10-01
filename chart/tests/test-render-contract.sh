@@ -57,6 +57,7 @@ $HELM template t "$CHART_DIR" --set auth.openrouterApiKey=or-x --set auth.anthro
 SET="$(printf '%s' "$OUT" | yq -N 'select(.kind=="ConfigMap") | .data["settings.json"]')"
 [ "$(printf '%s' "$SET" | yq -p json '.["acp.agents"] | keys | sort | join(",")')" = "claude,pi" ] || fail "settings must configure exactly the pi and claude agents"
 [ "$(printf '%s' "$SET" | yq -p json '.["acp.agents"].claude.command')" = "claude-agent-acp" ] || fail "claude agent must run claude-agent-acp"
+[ "$(printf '%s' "$SET" | yq -p json '.["chat.disableAIFeatures"]')" = "true" ] || fail "settings must disable VS Code's built-in chat (the image drops Copilot)"
 [ "$(printf '%s' "$SET" | yq -p json '.["security.workspace.trust.enabled"]')" = "false" ] || fail "workspace trust must be off (ACP sidebar)"
 printf '%s' "$DEP" | yq '.spec.template.spec.initContainers[] | select(.name=="pi-seed") | .args[0]' | grep -q "jq -S -s '.\[0\] \* .\[1\]'" || fail "pi-seed must merge required settings into the existing settings.json"
 printf '%s' "$C" | yq '.volumeMounts[] | select(.mountPath=="/home/coder/.local/share/code-server/extensions") | .subPath' | grep -qx extensions || fail "runtime extensions must persist on the pi volume"

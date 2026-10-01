@@ -98,6 +98,27 @@ RUN set -eu; \
     chown coder:coder "$UD/languagepacks.json"; \
     jq -e '."zh-tw".translations.vscode' "$UD/languagepacks.json"
 
+# 2c. the sidebar lists only the agents this image ships (pi, claude), and no Copilot.
+# ACP Client's agent list is Object.keys(acp.agents), and VS Code deep-merges an object
+# setting's package.json default with the user value, so its eleven built-in entries
+# (GitHub Copilot, Gemini CLI, Codex CLI, …, none installed here) can't be removed from
+# settings.json — empty the default instead; the chart seeds pi + claude and a tenant's
+# own "Add Agent" entries still land in settings.json. The built-in GitHub Copilot Chat
+# extension (170 MB) goes too; the chart also sets chat.disableAIFeatures so the core
+# chat view doesn't offer to install it.
+RUN set -eu; \
+    B=/usr/lib/code-server/lib/vscode/extensions; \
+    test -f "$B/copilot/package.json"; \
+    jq -e '.name == "copilot-chat"' "$B/copilot/package.json" >/dev/null; \
+    rm -rf "$B/copilot"; \
+    M=$(find "$B" -mindepth 2 -maxdepth 2 -path "*/formulahendry.acp-client-${ACP_CLIENT_VERSION}*/package.json" | head -n1); \
+    test -n "$M"; \
+    jq -e '[.contributes.configuration | if type == "array" then .[] else . end | .properties["acp.agents"].default | select(. != null) | keys | length] | add > 0' "$M" >/dev/null; \
+    tmp=$(mktemp); \
+    jq '.contributes.configuration |= (if type == "array" then map(if .properties["acp.agents"] then .properties["acp.agents"].default = {} else . end) else .properties["acp.agents"].default = {} end)' "$M" > "$tmp"; \
+    cat "$tmp" > "$M"; rm -f "$tmp"; \
+    jq -e '[.contributes.configuration | if type == "array" then .[] else . end | .properties["acp.agents"].default | select(. != null)] == [{}]' "$M" >/dev/null
+
 # 3. omnigent CLI in /opt/omnigent (image layer; the Python it needs is uv-managed
 # 3.12 because the base is Debian 12 / Python 3.11). The Claude Agent SDK falls back
 # to `claude` on PATH when its bundled CLI is absent — that is /usr/bin/claude, the

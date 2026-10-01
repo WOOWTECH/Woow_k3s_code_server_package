@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 — 2026-10-01
+
+Resync to chart `0.1.1` (woow-paas-charts `8d6e2761`) and paas-odoo-ci
+`af106ce2`:
+
+- The ACP chat sidebar lists only the agents this image ships (`pi`, `claude`):
+  the image empties ACP Client's built-in default agent list (GitHub Copilot,
+  Gemini CLI, Codex CLI, …, none installed), which VS Code would otherwise merge
+  into the tenant's settings.
+- No Copilot: the image drops the built-in GitHub Copilot Chat extension, and the
+  chart's required settings add `chat.disableAIFeatures`.
+
 ## 1.0.0 — 2026-10-01
 
 This repository becomes a **read-only mirror of the WOOW PaaS code-server cloud
