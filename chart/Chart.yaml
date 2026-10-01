@@ -28,7 +28,8 @@ description: |
   Deployed per-tenant by paas-operator as svc-{ref[:8]} into a paas-ws-* namespace.
 type: application
 # 0.1.0 = first cut (code-server 4.139.1, pi 0.99.1, Claude Code 2.1.285).
-version: 0.1.0
+# 0.1.1 = required settings add chat.disableAIFeatures (the image drops Copilot).
+version: 0.1.1
 appVersion: "4.139.1"
 keywords: [paas, code-server, vscode, ide, pi-agent, claude-code, cloud-service]
 maintainers:

@@ -14,12 +14,12 @@ the change against the Gitea repositories instead.
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `6812550be2a82486724a6473a087b77df1f16c67` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `027bc99165474e2db10741833a9329629a23de01` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `8d6e27616d6103084a167699e86060bf2beb376c` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `af106ce2e8afaed2cca4e6831f777c0b0e558f65` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-9f38fb0@sha256:fa0ddc38eb3b86c77fdda8e8ec1e85f18499a85975667483d56bf9dd8b4adef6`
 
-Chart `0.1.0` / appVersion `4.139.1` — synced 2026-09-30 23:41 UTC.
+Chart `0.1.1` / appVersion `4.139.1` — synced 2026-10-01 00:15 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

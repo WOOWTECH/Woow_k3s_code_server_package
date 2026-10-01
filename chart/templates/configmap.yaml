@@ -7,6 +7,11 @@ metadata:
 data:
   # Required VS Code settings (PARITY_CONTRACT 1.1 §2.5), merged into the IDE
   # user settings.json on every start by the pi-seed init container.
+  # chat.disableAIFeatures (PaaS): the image drops the built-in GitHub Copilot
+  # Chat extension; this hides VS Code's core chat view, which would otherwise
+  # sit in the secondary side bar offering to install Copilot. pi and Claude
+  # Code live in the ACP Client sidebar and the Claude Code extension, which
+  # use their own webviews and are unaffected.
   settings.json: |
     {
         "acp.agents": {
@@ -21,6 +26,7 @@ data:
                 "env": {}
             }
         },
+        "chat.disableAIFeatures": true,
         "extensions.autoUpdate": "off",
         "security.workspace.trust.enabled": false,
         "security.workspace.trust.startupPrompt": "never",
