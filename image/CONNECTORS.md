@@ -11,8 +11,8 @@
 **Install from VSIX…**，或在該 code-server 的終端執行：
 
 ```sh
-code-server --install-extension woowtech.paseo-0.1.1.vsix
-code-server --install-extension woowtech.omnigent-0.1.1.vsix
+code-server --install-extension woowtech.paseo-0.1.3.vsix
+code-server --install-extension woowtech.omnigent-0.1.3.vsix
 ```
 
 VSIX 本身只提供介面；既有的普通 code-server 映像還需要安裝本儲存庫的
@@ -36,7 +36,7 @@ runtime。缺少 runtime 時介面會明確顯示，不會宣稱已連線。
 
 ## 連接 Omnigent
 
-1. 在插件設定 Omnigent URL、工作區及主機名稱。
+1. 在插件設定 Omnigent 後端 URL、工作區及主機名稱。若瀏覽器需要不同的公開入口，另填 Web URL。
 2. 選擇登入，輸入該 **Omnigent 服務** 的帳號及密碼。
 3. 檢查主機是否在線，再開啟該 Omnigent Web。
 4. 在新對話選擇此主機與 Claude Code、Codex 或 Pi，選擇可用模型後送出訊息。
@@ -65,7 +65,7 @@ pi
 修改 MCP 後執行 `woow-agent-sync`，再開新的代理對話。原生 Claude、Codex、Pi
 仍保有自己的登入及個別設定；不會把供應商憑證複製到其他部署。
 Omnigent 的私人 session home 會繼承本部署的共用工具設定。
-完整共用設定格式見 [三代理設定](https://github.com/WOOWTECH/Woow_podman_code_server_package/blob/feat/paseo-omnigent-extensions/THREE_AGENTS.md)。
+完整共用設定格式見 [THREE_AGENTS.md](THREE_AGENTS.md)。
 
 在同一個代理對話中切換模型，應確認第二輪仍能讀取先前的對話內容。
 選擇另一個代理可能建立新的 session，不能假設不同代理會自動承接全部對話。
@@ -77,7 +77,7 @@ Omnigent 的私人 session home 會繼承本部署的共用工具設定。
 runtime 狀態位於 `/data/pi-agent/connectors/`，隨既有資料卷備份。
 請勿把此目錄加入 Git、映像或公開故障報告。
 
-實作來源、版本及限制見 [研究設計](https://github.com/WOOWTECH/Woow_podman_code_server_package/blob/feat/paseo-omnigent-extensions/docs/plans/2026-11-10-paseo-omnigent-extensions.md)、
+實作來源、版本及限制見 [研究設計](docs/plans/2026-11-10-paseo-omnigent-extensions.md)、
 [Paseo runtime](connectors/paseo/README.md)、[Omnigent runtime](connectors/omnigent/README.md)。
 單元測試或主機在線不代表三代理真實對話、模型切換及工具調用均已通過；
 部署驗收必須記錄各環境的實際結果。
