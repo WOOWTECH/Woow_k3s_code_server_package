@@ -23,13 +23,13 @@ Provider login and real model checks in the PaaS QA instance remain pending.
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `f9c2d59e1a7d15cc85447cf9389fc9f1387a24f8` |
-| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `f9c2d59e1a7d15cc85447cf9389fc9f1387a24f8` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `c98a93d384d7a8eac6bda4ea929bc47ff2d7ec4d` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `5457874185edcf0ce8ee963f42df78672af1c218` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `5457874185edcf0ce8ee963f42df78672af1c218` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `eea6d12158865b98a8f47cd59d0199dd8f188537` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1`
 
-Chart `0.1.10` / appVersion `4.139.1` — synced 2026-11-09 18:30 UTC.
+Chart `0.1.11` / appVersion `4.139.1` — synced 2026-11-09 19:35 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from
