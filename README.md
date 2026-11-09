@@ -3,8 +3,9 @@
 [繁體中文](README_zh-TW.md)
 
 Browser VS Code with Pi, Claude Code and Codex, deployed as a private service per tenant.
-This branch mirrors the three-agent candidate. It does not mean the PaaS marketplace
-or existing tenants have been upgraded; publishing the image still requires the Gitea release gate.
+This mirror follows the merged three-agent sources. The PaaS image has passed its
+release gate; marketplace and existing-instance upgrades are tracked separately.
+PaaS provider logins and real model conversation checks remain pending.
 
 This is a **read-only source mirror**. Edit `charts/code-server` in
 `woow-paas/woow-paas-charts` and `code-server` in `woow-paas/paas-odoo-ci` on Gitea.

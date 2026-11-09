@@ -3,7 +3,8 @@
 [English](README.md)
 
 瀏覽器版 VS Code，內建 Pi、Claude Code、Codex，每個租戶使用獨立實例。
-此分支是三代理候選版的來源鏡像；PaaS 商城與既有租戶尚未因此升級，正式映像仍須通過 Gitea 發布核可。
+本鏡像對齊已合併的三代理來源，PaaS 映像已通過發布核可。商城與既有租戶升級分別追蹤；
+PaaS 的模型登入與真實對話測試仍待完成。
 
 本 repo 是**唯讀來源鏡像**。正本在 Gitea 的 `woow-paas/woow-paas-charts`（`charts/code-server`）
 與 `woow-paas/paas-odoo-ci`（`code-server`）。[MIRROR.md](MIRROR.md) 記錄來源提交與基底映像 digest。
