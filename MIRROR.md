@@ -25,11 +25,11 @@ Provider login and real model checks in the PaaS QA instance remain pending.
 |---|---|---|---|
 | `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `5457874185edcf0ce8ee963f42df78672af1c218` |
 | `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `5457874185edcf0ce8ee963f42df78672af1c218` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `eac97f3f5906b6d98e3da4881e31511b7573db99` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `d8d239f08b5b400eddbb6f7509f0d88918d65041` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1`
 
-Chart `0.1.11` / appVersion `4.139.1` — synced 2026-11-09 21:04 UTC.
+Chart `0.1.11` / appVersion `4.139.1` — synced 2026-11-09 21:14 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from
