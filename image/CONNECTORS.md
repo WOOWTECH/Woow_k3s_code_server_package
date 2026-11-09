@@ -81,7 +81,9 @@ Omnigent 的私人 session home 會繼承本部署的共用工具設定。
 runtime 狀態位於 `/data/pi-agent/connectors/`，隨既有資料卷備份。
 請勿把此目錄加入 Git、映像或公開故障報告。
 
-實作來源、版本及限制見 [研究設計](docs/plans/2026-11-10-paseo-omnigent-extensions.md)、
+實作來源、版本及限制見 [研究設計](https://github.com/WOOWTECH/Woow_podman_code_server_package/blob/feat/paseo-omnigent-extensions/docs/plans/2026-11-10-paseo-omnigent-extensions.md)、
 [Paseo runtime](connectors/paseo/README.md)、[Omnigent runtime](connectors/omnigent/README.md)。
 單元測試或主機在線不代表三代理真實對話、模型切換及工具調用均已通過；
 部署驗收必須記錄各環境的實際結果。
+
+各環境的實際結果與限制見[本輪驗收紀錄](https://github.com/WOOWTECH/Woow_podman_code_server_package/blob/feat/paseo-omnigent-extensions/docs/research/code-server-connectors-acceptance-20261110.md)。
