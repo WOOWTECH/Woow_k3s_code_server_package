@@ -10,3 +10,6 @@
 .vscode/
 # chart tests are dev-only assertions, not part of the runtime package
 tests/
+# python bytecode from local runs of files/omnigent-host/og_helper.py
+__pycache__/
+*.pyc

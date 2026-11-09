@@ -90,3 +90,36 @@ would never match. Fails the render on a URL without a host.
 {{- $h -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Parallel build jobs (MAKEFLAGS & co.): codeServer.buildJobs, else the
+container's CPU limit rounded up ("2" → 2, "1500m" → 2), else 2. `nproc` in the
+container reports the node's cores, not the limit (QA CS-10).
+*/}}
+{{- define "code-server.buildJobs" -}}
+{{- $raw := .Values.codeServer.buildJobs -}}
+{{- $j := ternary "" (toString $raw) (kindIs "invalid" $raw) -}}
+{{- if eq $j "" -}}
+{{- $cpu := toString (dig "limits" "cpu" "" (.Values.codeServer.resources | default dict)) -}}
+{{- if hasSuffix "m" $cpu -}}
+{{- $j = toString (int (ceil (divf (trimSuffix "m" $cpu | float64) 1000))) -}}
+{{- else if $cpu -}}
+{{- $j = toString (int (ceil ($cpu | float64))) -}}
+{{- else -}}
+{{- $j = "2" -}}
+{{- end -}}
+{{- end -}}
+{{- if not (regexMatch "^[1-9][0-9]*$" $j) -}}
+{{- fail (printf "codeServer.buildJobs %q must be a positive integer (derived from the CPU limit when empty)" $j) -}}
+{{- end -}}
+{{- $j -}}
+{{- end -}}
+
+{{/* HOME state on the pi-data volume (persistence.home.enabled, default true). */}}
+{{- define "code-server.homeEnabled" -}}
+{{- $h := (.Values.persistence | default dict).home | default dict -}}
+{{- if ne (toString (ternary $h.enabled true (hasKey $h "enabled"))) "false" -}}true{{- end -}}
+{{- end -}}
+
+{{/* #1458: code-server's unix socket behind the cookie proxy. */}}
+{{- define "code-server.socketPath" -}}/run/code-server/code-server.sock{{- end -}}

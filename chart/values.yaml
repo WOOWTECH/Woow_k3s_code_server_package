@@ -21,19 +21,113 @@ codeServer:
   publicUrl: ""
   # UI language (the image ships the zh-hant language pack). "" → English.
   locale: "zh-tw"
+  # Login page in Traditional Chinese (INFRA-DOC-007-3). code-server 4.139.1 has login
+  # strings only for en / zh-cn / ja / th / ur, so with locale zh-tw the page fell back
+  # to English and said "Password was set from $PASSWORD." — naming the env var that
+  # carries the password. true → the chart's code-server-i18n.json (settings ConfigMap,
+  # read-only at /etc/code-server/i18n.json) is passed as --i18n: code-server merges it
+  # over EVERY bundled language, so the page is zh-TW whatever locale resolves to and
+  # points at the PaaS service page「管理員帳密」. false → upstream strings.
+  loginI18n: true
   extraEnv: []
+  # Parallel build jobs for the toolchains in the IDE terminal and in Omnigent
+  # sessions (MAKEFLAGS=-jN, UV_CONCURRENT_BUILDS, CMAKE_BUILD_PARALLEL_LEVEL,
+  # PYTEST_XDIST_AUTO_NUM_WORKERS). `nproc` reports the node's cores (e.g. 256),
+  # not the CPU limit. "" → the CPU limit below, rounded up (2 for the T1 plan).
+  buildJobs: ""
+  # The whole plan (T1: 2 vCPU / 4Gi). The Omnigent host and its sessions run
+  # INSIDE this container (omnigentHost) and share these limits; nothing is split.
+  # ephemeral-storage (#1434): the node's system disk under the container layer
+  # (/tmp, /var/tmp, anything outside the volumes) PLUS the ~/.cache emptyDir
+  # (persistence.cache.sizeLimit, 2Gi) and logs. HOME and /workspace are on the
+  # PVCs. Above the limit the kubelet evicts ONLY this pod instead of letting it fill
+  # the node into DiskPressure. The request is what the scheduler reserves.
   resources:
     requests:
       cpu: 500m
       memory: 1Gi
+      ephemeral-storage: 1Gi
     limits:
       cpu: "2"
       memory: 4Gi
+      ephemeral-storage: 8Gi
+
+# ── Session cookie hardening (#1458) ──────────────────────────────────────────
+# code-server's session cookie (code-server-session = a hash of the password) has
+# no HttpOnly and no Secure flag, and code-server has no option for them. With
+# this on, a small nginx in the pod takes the entrance port (8080) and adds both
+# flags to every Set-Cookie of that cookie (proxy_cookie_flags); code-server
+# listens on a unix socket in a pod-private emptyDir instead of a TCP port, so the
+# only way in is through nginx. Nothing else changes: same password login,
+# websockets, uploads and downloads stream through unbuffered.
+# Limits (code-server design, not fixable here): the cookie stays valid until the
+# password changes — logout only deletes it in that browser; there is no
+# server-side idle/absolute timeout. Changing the password on the PaaS service
+# page revokes every session. See the PR (#1458) for the auth-proxy design that
+# would fix those.
+# false = 0.1.3 behaviour (code-server on 0.0.0.0:8080, no sidecar).
+cookieProxy:
+  enabled: true
+  image:
+    repository: nginxinc/nginx-unprivileged
+    tag: "1.27-alpine"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 10m, memory: 16Mi, ephemeral-storage: 16Mi}
+    limits: {cpu: 500m, memory: 128Mi, ephemeral-storage: 256Mi}
+  # nginx's /tmp emptyDir (nothing is buffered to disk; temp files only).
+  tmpSizeLimit: 64Mi
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+claude:
+  # Load the remote MCP connectors of the logged-in claude.ai account (Gmail,
+  # Drive, …) into Claude Code here? Off by default (ENABLE_CLAUDEAI_MCP_SERVERS):
+  # anyone who can open the IDE would otherwise borrow all of them (QA CS-07).
+  claudeAiMcpServers: false
 
 # ── pi defaults (seeded into settings.json only when absent) ─────────────────
+# pi reads them from $PI_CODING_AGENT_DIR/settings.json = /data/pi-agent/settings.json
+# (pi-coding-agent config.js getSettingsPath()); the image's pi-seed writes that
+# file only when it is absent AND a model is given, and files/pi-seed.sh fills the
+# two keys into an existing settings.json that has neither — never overriding.
 pi:
   defaultProvider: "openai-codex"
   defaultModel: ""
+  # #1378: with auth.openrouterApiKey set and defaultModel empty, pi's default
+  # becomes provider "openrouter" + this model (an id from pi's built-in
+  # OpenRouter catalog; pi's own OpenRouter default as of 0.99.1). Without it pi
+  # picks anthropic first and sends ANTHROPIC_AUTH_TOKEN (the OpenRouter key set
+  # for Claude Code) to Anthropic → 401. "" disables the switch.
+  openrouterDefaultModel: "moonshotai/kimi-k2.6"
+
+# ── Omnigent host (inside the code-server container) ─────────────────────────
+# Standard block of the shared kit (shared/omnigent-host/chart/values-snippet.yaml).
+# Makes this IDE a machine ("host") of an Omnigent service, so Omnigent can run
+# Claude Code / pi sessions here (on /workspace, with the tenant's own logins).
+# The host runs INSIDE the code-server container, next to code-server, like a
+# daemon on an ordinary machine, and dials out to the Omnigent service: the
+# image's ENTRYPOINT (omnigent-host-entry) starts the kit supervisor in the
+# background whenever this chart mounts the kit. No sidecar, no resource split:
+# the host and its sessions share codeServer.resources; under memory pressure
+# the kit kills an Omnigent session first, never code-server.
+# The tenant connects it ONCE from the IDE terminal:  omnigent login <Omnigent URL>
+# The supervisor waits for that login, then keeps `omnigent host` running and
+# brings it back after every restart. The platform never logs in, stores or
+# sees an Omnigent token; not logged in = the supervisor only sleeps (~2 MB).
+omnigentHost:
+  enabled: true
+  # The same-workspace Omnigent URL (injected by the platform). Rendered only
+  # into a small runtime ConfigMap the supervisor re-reads, so setting or
+  # changing it never restarts the pod. It is only a hint for the login command
+  # and a fallback: the host uses the URL the tenant logged in to.
+  serverUrl: ""
+  # Name in Omnigent's machine list; "" → "code-server · <release>". Must be unique
+  # per Omnigent account (a duplicate name merges two machines into one).
+  hostName: ""
+  # Absolute path Omnigent sessions should use; "" → /workspace.
+  workspace: ""
+  # Login re-check period (seconds) of a running host; >= 30 (render fails below).
+  watchSeconds: 120
 
 # ── git identity for commits made in the IDE ─────────────────────────────────
 git:
@@ -86,6 +180,46 @@ persistence:
   piData:
     size: 5Gi
     existingClaim: ""
+  # The tenant's HOME state survives pod restarts (every settings change on the
+  # platform restarts the pod): ~/.ssh, ~/.config and ~/.local (incl. `npm i -g`
+  # tools, `uv tool install` tools, pip --user, ~/.local/bin) are mounted from
+  # the pi-data volume (directory home/ next to pi's home/.pi), ~/.gitconfig and
+  # ~/.bash_history are files there (GIT_CONFIG_GLOBAL / HISTFILE, plus links
+  # in the image). The pi-seed init seeds the image's skeleton without ever
+  # overwriting a tenant file. code-server's own config is NOT read from here:
+  # CODE_SERVER_CONFIG is the chart's read-only /etc/code-server/config.yaml
+  # (auth: password), so nothing written into ~/.config can switch the password
+  # login off. ~/.local/bin comes AFTER the system dirs on the image PATH, so a
+  # persisted `claude`, `pi`, `omnigent`, `code-server`, … never shadows the
+  # image's pinned one (the kit runs exactly omnigent at OG_BIN anyway).
+  # false = ~/.ssh, ~/.config and ~/.local on the container layer (lost on every
+  # restart, as in 0.1.1); ~/.gitconfig and ~/.bash_history still persist, because
+  # the image links them into /data/pi-agent/home on the pi volume.
+  home:
+    enabled: true
+  # ~/.cache (pip, uv, npm caches, …) on an emptyDir capped at this size instead
+  # of the container layer, so caches can neither fill the node's disk nor the
+  # pi-data volume; above the cap kubelet evicts only this pod.
+  cache:
+    sizeLimit: 2Gi
+
+# ── Same-workspace LiteLLM (model gateway) ────────────────────────────────────
+# The in-cluster OpenAI-compatible base URL of a LiteLLM service in the same
+# workspace, e.g. http://<release>-litellm.<ns>.svc.cluster.local:4000/v1 —
+# INJECTED BY THE PLATFORM (the oldest running LiteLLM of the workspace); a
+# non-empty value set by the tenant wins and is never overwritten. Only the URL
+# is injected, never a key: the tenant creates a virtual key in LiteLLM's admin
+# UI and pastes it into the tool's own settings (README "同工作區 LiteLLM").
+# The IDE container gets it as env LITELLM_BASE_URL (terminals and Omnigent
+# sessions too) from a small runtime ConfigMap that is NOT hashed into the pod
+# template, so setting or changing it never restarts the pod (the password
+# reset stays within its 15 s budget); a running pod picks it up at its next
+# restart. OPENAI_BASE_URL / ANTHROPIC_BASE_URL are deliberately NOT set (that
+# would hijack the tenant's own provider setup). Reached through
+# networkPolicy.sameNamespaceEgress (default true). Not an http(s) URL →
+# ignored (no env; NOTES says so), never a render failure.
+llmGateway:
+  baseUrl: ""
 
 # ── NetworkPolicy (default-deny + explicit allow) ─────────────────────────────
 networkPolicy:
@@ -93,11 +227,15 @@ networkPolicy:
   ingressNamespaces: []   # empty = operator-baseline-governed (no chart ingress rule)
   # Code the agents write runs in this pod: allow the internet (model APIs,
   # package registries, git hosts) but not cluster or private networks.
-  # true = unrestricted egress (not recommended).
+  # allowAllEgress (legacy): since 0.1.6 true renders the same rule as false — a bare
+  # `- {}` would cancel the platform baseline egress (NetworkPolicies are a union, #1441).
   allowAllEgress: false
   # Allow egress to pods in this namespace (e.g. an Omnigent service in the same
   # workspace, for `omnigent host` over the in-cluster address).
   sameNamespaceEgress: true
+  # Workspace = LAN (woow_paas_platform #1441): every pod of this namespace may
+  # reach this pod on every port (the platform baseline allow-same-ns does too).
+  sameNamespaceIngress: true
 
 # ── Pod hardening ─────────────────────────────────────────────────────────────
 podSecurityContext:

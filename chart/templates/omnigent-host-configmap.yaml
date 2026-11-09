@@ -1,0 +1,2 @@
+{{- /* omnigent-host kit ConfigMap + runtime ConfigMap (server-url), shared kit; nothing when disabled. */}}
+{{- include "woow.omnigentHost.configMaps" (dict "root" . "name" (printf "%s-omnigent-host" (include "code-server.fullname" .)) "labels" (include "code-server.labels" . | fromYaml)) }}
