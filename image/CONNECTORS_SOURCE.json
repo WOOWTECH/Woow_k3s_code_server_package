@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/WOOWTECH/Woow_podman_code_server_package",
-  "sourceRevision": "fe3371244555298d1dce9b933bce818108312150",
+  "sourceRevision": "1b12841feb33d8f060b79fbb3ebfd3841dd0cae5",
   "files": {
     "connectors/cli.mjs": "94c633a865c117c0f2a9b089ace0e4041a896ecb07cdf4737b9376f5e1ca1a68",
     "connectors/install-runtime.sh": "b4566a5df4ba756380e84a92518b789994ac5ff77f39af9e765f58a82ef4d3ee",
