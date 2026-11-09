@@ -36,6 +36,12 @@ spec:
               kubernetes.io/metadata.name: {{ . | quote }}
         {{- end }}
     {{- end }}
+    {{- if .Values.networkPolicy.sameNamespaceIngress }}
+    # Workspace = LAN (woow_paas_platform #1441): every pod of this namespace, on
+    # every port.
+    - from:
+        - podSelector: {}
+    {{- end }}
   egress:
     - to:
         - namespaceSelector:
@@ -44,21 +50,19 @@ spec:
       ports:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
-    {{- if .Values.networkPolicy.allowAllEgress }}
-    - {}
-    {{- else }}
     # The public internet on any port (model APIs, package registries, git over
-    # https and ssh), but not the cluster or private networks: code the agents
-    # write runs in this pod.
+    # https and ssh), but not the cluster, private networks, metadata, CGNAT or
+    # multicast: code the agents write runs in this pod. allowAllEgress (legacy)
+    # no longer opens a bare `- {}` — it would cancel the platform baseline egress
+    # (NetworkPolicies are a union, #1436 / #1441); it means the same rule.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
-            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10, 224.0.0.0/4, 240.0.0.0/4]
     {{- if .Values.networkPolicy.sameNamespaceEgress }}
-    # Services in this workspace's own namespace (e.g. an Omnigent service, for
-    # `omnigent host` over the in-cluster address).
+    # Workspace = LAN (#1441): every pod of this namespace on every port (e.g. an
+    # Omnigent service, for `omnigent host` over the in-cluster address).
     - to:
         - podSelector: {}
-    {{- end }}
     {{- end }}
 {{- end }}

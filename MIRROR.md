@@ -14,12 +14,12 @@ the change against the Gitea repositories instead.
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `8d6e27616d6103084a167699e86060bf2beb376c` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `af106ce2e8afaed2cca4e6831f777c0b0e558f65` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `9c06fbb9a1b18431d201d52caecd3de5b5b876fd` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `c93004eceaa3c3761eaec2290321c34e060e56cf` |
 
-Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-9f38fb0@sha256:fa0ddc38eb3b86c77fdda8e8ec1e85f18499a85975667483d56bf9dd8b4adef6`
+Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1`
 
-Chart `0.1.1` / appVersion `4.139.1` — synced 2026-10-01 00:15 UTC.
+Chart `0.1.10` / appVersion `4.139.1` — synced 2026-11-09 16:27 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

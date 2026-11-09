@@ -20,6 +20,11 @@ data:
                 "args": [],
                 "env": {}
             },
+            "codex": {
+                "command": "codex-code",
+                "args": [],
+                "env": {}
+            },
             "claude": {
                 "command": "claude-agent-acp",
                 "args": [],
@@ -33,12 +38,98 @@ data:
         "security.workspace.trust.banner": "never",
         "security.workspace.trust.emptyWindow": false
     }
-  # System gitconfig (mounted at /etc/gitconfig). The credential helper answers
-  # only for git.tokenHosts and only when GIT_TOKEN is set (auth.gitToken);
-  # otherwise it prints nothing and git falls through to its normal prompt.
+  # code-server's ONLY config file (CODE_SERVER_CONFIG=/etc/code-server/config.yaml,
+  # a read-only mount of this key). code-server would otherwise read
+  # ~/.config/code-server/config.yaml, which is on the tenant volume
+  # (persistence.home): any process running as coder (an extension, an Omnigent
+  # session, the tenant) could write `auth: none` or a `hashed-password` there (a
+  # hashed-password beats $PASSWORD) and switch the platform password off for good,
+  # across restarts and password resets. Nothing else is configured here: the
+  # password is $PASSWORD from the chart Secret, the other flags are args.
+  code-server-config.yaml: |
+    auth: password
+  {{- if .Values.codeServer.loginI18n }}
+  # Login page strings (INFRA-DOC-007-3; codeServer.loginI18n), passed as
+  # --i18n /etc/code-server/i18n.json. code-server merges them over every bundled
+  # language (src/node/i18n/index.ts loadCustomStrings), so zh-tw — which has no
+  # bundled strings and falls back to en — shows these too. Exactly the keys of
+  # upstream src/node/i18n/locales/en.json (tests/test-login-i18n.sh). No i18next
+  # placeholders (an unresolved "app" placeholder would print literally: --app-name is
+  # not set) and no word
+  # about HOW the password reaches code-server (upstream: "Password was set from
+  # $PASSWORD."): the tenant manages it on the PaaS service page.
+  code-server-i18n.json: |
+    {
+      "LOGIN_TITLE": "code-server 登入",
+      "LOGIN_BELOW": "請在下方輸入密碼登入。",
+      "WELCOME": "歡迎使用 code-server",
+      "LOGIN_PASSWORD": "密碼於開通時顯示一次；忘記時請到 WOOW PaaS 服務頁的「管理員帳密」重設或改成自己的密碼。",
+      "LOGIN_USING_ENV_PASSWORD": "密碼於開通時顯示一次；忘記時請到 WOOW PaaS 服務頁的「管理員帳密」重設或改成自己的密碼。",
+      "LOGIN_USING_HASHED_PASSWORD": "密碼於開通時顯示一次；忘記時請到 WOOW PaaS 服務頁的「管理員帳密」重設或改成自己的密碼。",
+      "SUBMIT": "登入",
+      "PASSWORD_PLACEHOLDER": "密碼",
+      "LOGIN_RATE_LIMIT": "登入嘗試太頻繁，請稍候再試（每分鐘 2 次、每小時 12 次）。",
+      "MISS_PASSWORD": "請輸入密碼",
+      "INCORRECT_PASSWORD": "密碼錯誤"
+    }
+  {{- end }}
+  {{- if .Values.cookieProxy.enabled }}
+  # #1458 cookie proxy (nginx in the pod, on the entrance port): adds HttpOnly +
+  # Secure to code-server's session cookie; code-server itself listens on a unix
+  # socket in a pod-private emptyDir. Websockets / uploads / downloads stream
+  # through unbuffered; no access log (URLs may carry tokens).
+  cookie-proxy.conf: |
+    worker_processes 1;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+    events { worker_connections 4096; }
+    http {
+      server_tokens off;
+      access_log off;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      fastcgi_temp_path /tmp/fastcgi;
+      uwsgi_temp_path /tmp/uwsgi;
+      scgi_temp_path /tmp/scgi;
+      client_max_body_size 0;
+      map $http_upgrade $connection_upgrade { default upgrade; "" ""; }
+      server {
+        listen {{ .Values.codeServer.port }};
+        location = /woow-cookie-proxy-healthz { return 200 "ok\n"; }
+        location / {
+          proxy_pass http://unix:{{ include "code-server.socketPath" . }}:;
+          proxy_http_version 1.1;
+          proxy_set_header Host $http_host;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection $connection_upgrade;
+          proxy_buffering off;
+          proxy_request_buffering off;
+          proxy_read_timeout 1d;
+          proxy_send_timeout 1d;
+          proxy_cookie_flags ~^code-server-session httponly secure;
+        }
+      }
+    }
+  {{- end }}
+  # pi-seed init container script (files/pi-seed.sh; tests/test-pi-seed.sh runs it).
+  pi-seed.sh: |
+{{ .Files.Get "files/pi-seed.sh" | indent 4 }}
+  # System gitconfig (mounted at /etc/gitconfig, replacing the image's). The
+  # credential helper answers only for git.tokenHosts and only when GIT_TOKEN is
+  # set (auth.gitToken); otherwise it prints nothing and git falls through to its
+  # normal prompt. core.quotepath=false: non-ASCII (e.g. Chinese) file names are
+  # shown as they are, not as octal escapes (QA CSV-M2). The lfs filter is the
+  # image's own `git lfs install --system` entry, which this mount would hide.
   gitconfig: |
     [init]
         defaultBranch = main
+    [core]
+        quotepath = false
+    [filter "lfs"]
+        clean = git-lfs clean -- %f
+        smudge = git-lfs smudge -- %f
+        process = git-lfs filter-process
+        required = true
     {{- if or .Values.git.userName .Values.git.userEmail }}
     [user]
     {{- with .Values.git.userName }}

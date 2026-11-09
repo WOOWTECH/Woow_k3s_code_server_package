@@ -7,8 +7,54 @@ Public URL: {{ . }}
 
 Login: code-server's own password page. The password is the tenant credential
 shown once at creation; reset or change it from the PaaS service page
-("Admin Credentials") — saving restarts the pod.
+("Admin Credentials") — saving restarts the pod. code-server reads only the
+chart's read-only /etc/code-server/config.yaml (auth: password): editing
+~/.config/code-server/config.yaml has no effect.
 
-Built in: pi (terminal `pi` + the ACP chat sidebar) and Claude Code (terminal
-`claude`, the sidebar's "claude" agent, and the extension). Sign in once per
-agent in the terminal (`pi login`, `claude`), or set API keys on the service page.
+Secrets inside the IDE: the login password ($PASSWORD) and the optional keys from the
+service page (ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GIT_TOKEN) are environment
+variables of this container. Every process here runs as the same user, so any
+terminal command, extension or AI assistant (Pi, Claude Code, Codex, Omnigent sessions) can
+read all of them — the password too, from /proc/1/environ, although code-server drops
+it from its own children's env. Prefer a budget-limited LiteLLM virtual key (or an
+OpenRouter key with a credit limit) over a master key, a fine-grained short-lived Git
+token, and only trusted extensions. Suspect a leak: reset the password on the service
+page (signs every browser out) and rotate the keys. README: 容器內看得到的密碼與金鑰.
+
+Built in: Pi, Claude Code, and Codex, available from the terminal and ACP sidebar.
+Sign in per agent (`pi login`, `claude auth login`, `codex login --device-auth`).
+Skills share /data/pi-agent/skills. Edit shared/mcp.json under the same private
+volume, run woow-agent-sync, and reconnect sessions to load MCP changes.
+{{- if include "code-server.homeEnabled" . }}
+
+Your HOME state survives restarts: ~/.ssh, ~/.config, ~/.local (npm -g / uv tool
+installs, ~/.local/bin — on PATH after the system dirs, so it never shadows the
+image's claude / pi / omnigent), ~/.gitconfig and the shell history live on the pi-data volume
+(/data/pi-agent/home); ~/.cache is a {{ (.Values.persistence.cache | default dict).sizeLimit | default "unlimited" }} scratch area that a pod restart empties.
+{{- end }}
+{{- if include "woow.omnigentHost.enabled" . }}
+
+Omnigent host (inside this container, shared omnigent-host kit): to let an Omnigent
+service run Claude Code / pi sessions in this IDE, open the IDE terminal once and run
+  omnigent login {{ include "woow.omnigentHost.serverUrl" . | default "<Omnigent URL>" }}
+(WOOW default: the workspace's Omnigent admin account, which then owns this machine).
+Within a minute the IDE appears in that account's machine list as
+"{{ include "woow.omnigentHost.hostName" . }}" and comes back by itself after every restart;
+sessions use /workspace. Status: `omnigent-host-status` in the terminal (new terminals
+print it whenever you need to act). Do not start `omnigent host` yourself: it already
+runs, managed automatically. The platform never holds an Omnigent token. Deleting
+/data/pi-agent/omnigent/auth_tokens.json only logs this machine out locally; to revoke
+the login, delete or disable the user in Omnigent.
+{{- end }}
+{{- $llm := include "code-server.llmGatewayBaseUrl" . }}
+{{- $llmRaw := include "code-server.llmGatewayRawBaseUrl" . }}
+{{- if $llm }}
+
+同工作區 LiteLLM（llmGateway.baseUrl）：IDE 容器（終端機、Omnigent session 也繼承）有 env LITELLM_BASE_URL={{ $llm }}
+    （OpenAI 相容 base URL；容器啟動時讀取，改網址後下次重啟才生效）。平台不傳金鑰：
+    在 LiteLLM 後台自建虛擬金鑰，貼到要用的工具自己的設定。{{ if not (or .Values.networkPolicy.allowAllEgress .Values.networkPolicy.sameNamespaceEgress) }}
+    ⚠ allowAllEgress 與 sameNamespaceEgress 都關 → 連不到同工作區 LiteLLM。{{ end }}
+{{- else if $llmRaw }}
+
+同工作區 LiteLLM：llmGateway.baseUrl {{ $llmRaw | quote }} 不是 http(s) 網址，已略過（沒有 LITELLM_BASE_URL）。
+{{- end }}

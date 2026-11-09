@@ -1,3 +1,16 @@
+{{- $kitCM := printf "%s-omnigent-host" (include "code-server.fullname" .) }}
+{{- $home := include "code-server.homeEnabled" . }}
+{{- $jobs := include "code-server.buildJobs" . }}
+{{- /* #1378: an OpenRouter key and no explicit pi model → pi defaults to OpenRouter.
+       Without a seeded default pi picks the FIRST provider with auth in its own
+       order (anthropic before openrouter), and ANTHROPIC_AUTH_TOKEN (the OpenRouter
+       key, meant for Claude Code) counts as anthropic auth → 401 from Anthropic. */}}
+{{- $piProvider := .Values.pi.defaultProvider }}
+{{- $piModel := .Values.pi.defaultModel }}
+{{- if and .Values.auth.openrouterApiKey (not .Values.pi.defaultModel) .Values.pi.openrouterDefaultModel }}
+{{- $piProvider = "openrouter" }}
+{{- $piModel = .Values.pi.openrouterDefaultModel }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,7 +39,16 @@ spec:
         # leave the pod template untouched (the platform restarts the pod itself
         # after `helm upgrade`), or helm would wait for a new pod inside the
         # reset's short --atomic budget and roll back.
-        checksum/optional-auth: {{ printf "%s|%s|%s" .Values.auth.anthropicApiKey .Values.auth.openrouterApiKey .Values.auth.gitToken | sha256sum }}
+        # "keys-always-rendered" (#1556, 0.1.7): changes the hash once, so the upgrade to
+        # this version restarts the pod and a key cleared before the fix (stale in the
+        # Secret, now overwritten with "") leaves the running process too.
+        checksum/optional-auth: {{ printf "keys-always-rendered|%s|%s|%s" .Values.auth.anthropicApiKey .Values.auth.openrouterApiKey .Values.auth.gitToken | sha256sum }}
+        {{- if include "woow.omnigentHost.enabled" . }}
+        # Restart when the vendored omnigent-host KIT changes. omnigentHost.serverUrl
+        # lives in the runtime ConfigMap, deliberately not hashed: injecting or
+        # changing the URL never restarts the pod.
+        checksum/omnigent-host: {{ include "woow.omnigentHost.checksum" (dict "root" . "name" $kitCM) }}
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -59,34 +81,29 @@ spec:
         # skeleton, which also creates claude/ on volumes from older images) and
         # merge the required settings keys into the IDE user settings — the same
         # init the WOOWTECH k3s chart runs, so an existing settings.json gains new
-        # required keys (e.g. the claude agent) without losing the tenant's own.
+        # required keys (e.g. the claude agent) without losing the tenant's own —
+        # plus, with persistence.home, the HOME skeleton (files/pi-seed.sh).
         - name: pi-seed
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -eu
-              /usr/local/bin/pi-seed
-              chmod 700 /data/pi-agent/claude 2>/dev/null || true
-              mkdir -p /ide /extensions
-              [ -f /ide/settings.json ] || cp /seed/settings.json /ide/settings.json
-              tmp=$(mktemp)
-              jq -S -s '.[0] * .[1]' /ide/settings.json /seed/settings.json > "$tmp" && mv "$tmp" /ide/settings.json
+          # files/pi-seed.sh from the settings ConfigMap (executed by tests/test-pi-seed.sh).
+          command: ["/bin/sh", "/seed/pi-seed.sh"]
           env:
             - name: PI_AGENT_DATA_DIR
               value: /data/pi-agent
             - name: PI_DEFAULT_PROVIDER
-              value: {{ .Values.pi.defaultProvider | quote }}
+              value: {{ $piProvider | quote }}
             - name: PI_DEFAULT_MODEL
-              value: {{ .Values.pi.defaultModel | quote }}
+              value: {{ $piModel | quote }}
+            - name: SEED_HOME
+              value: {{ ternary "1" "0" (eq $home "true") | quote }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           resources:
-            requests: {cpu: 50m, memory: 64Mi}
-            limits: {cpu: 500m, memory: 256Mi}
+            requests: {cpu: 50m, memory: 64Mi, ephemeral-storage: 32Mi}
+            limits: {cpu: 500m, memory: 256Mi, ephemeral-storage: 256Mi}
           volumeMounts:
             - name: pi-data
               mountPath: /data/pi-agent
@@ -104,10 +121,23 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           workingDir: /workspace
-          # Appended to the image ENTRYPOINT (entrypoint.sh --bind-addr 0.0.0.0:8080 .).
+          # LITELLM_BASE_URL (same-workspace LiteLLM, llmGateway.baseUrl) from the runtime
+          # ConfigMap: referenced by name only, so the URL never enters this template and
+          # injecting / changing it never restarts the pod (templates/llm-gateway-configmap.yaml).
+          envFrom:
+            - configMapRef:
+                name: {{ include "code-server.llmGatewayConfigMapName" . }}
+                optional: true
+          # No command: the image ENTRYPOINT is dumb-init -> omnigent-host-entry ->
+          # entrypoint.sh --bind-addr 0.0.0.0:8080 . ; with the kit mounted below the
+          # stub runs the kit launcher (supervisor in the background, then code-server).
+          # args are appended to that ENTRYPOINT.
+          # --auth password: the password login cannot be configured away (the config
+          # file below is chart-managed and read-only as well).
           {{- $origin := include "code-server.trustedOriginHost" . }}
-          {{- if or $origin .Values.codeServer.locale }}
           args:
+            - --auth
+            - password
             {{- with $origin }}
             - --trusted-origins
             - {{ . | quote }}
@@ -116,13 +146,29 @@ spec:
             - --locale
             - {{ . | quote }}
             {{- end }}
-          {{- end }}
+            {{- if .Values.codeServer.loginI18n }}
+            # INFRA-DOC-007-3: zh-TW login page strings (settings ConfigMap
+            # code-server-i18n.json, read-only projection below). code-server refuses to
+            # start when the file is missing, so flag and projection share one condition.
+            - --i18n
+            - /etc/code-server/i18n.json
+            {{- end }}
+            {{- if .Values.cookieProxy.enabled }}
+            # #1458: behind the cookie proxy — a unix socket instead of the image's
+            # --bind-addr 0.0.0.0:8080 (code-server ignores bind-addr with --socket).
+            - --socket
+            - {{ include "code-server.socketPath" . | quote }}
+            {{- end }}
           env:
             - name: PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "code-server.secretName" . }}
                   key: admin_password
+            # code-server reads ONLY the chart's read-only config (auth: password), never
+            # the tenant-writable ~/.config/code-server/config.yaml on the HOME volume.
+            - name: CODE_SERVER_CONFIG
+              value: /etc/code-server/config.yaml
             - name: TZ
               value: {{ .Values.timezone | quote }}
             - name: PI_AGENT_DATA_DIR
@@ -133,11 +179,44 @@ spec:
               value: "0"
             - name: PI_SKIP_VERSION_CHECK
               value: "1"
+            - name: CODEX_HOME
+              value: /data/pi-agent/codex
             - name: CLAUDE_CONFIG_DIR
               value: /data/pi-agent/claude
             - name: DISABLE_AUTOUPDATER
               value: "1"
-            # Optional platform-supplied keys: absent key → env var unset.
+            {{- if not .Values.claude.claudeAiMcpServers }}
+            # Claude Code does not load the claude.ai account's remote MCP connectors
+            # (Gmail, Drive, …) here: whoever opens the IDE would borrow them (QA CS-07).
+            - name: ENABLE_CLAUDEAI_MCP_SERVERS
+              value: "false"
+            {{- end }}
+            # `npm i -g` into ~/.local (on the pi volume with persistence.home; its bin
+            # is first on the image PATH); npm's cache into the size-limited ~/.cache.
+            - name: NPM_CONFIG_PREFIX
+              value: /home/coder/.local
+            - name: NPM_CONFIG_CACHE
+              value: /home/coder/.cache/npm
+            {{- if $home }}
+            # ~/.gitconfig and shell history on the pi volume (the image also links
+            # ~/.gitconfig and ~/.bash_history to these files).
+            - name: GIT_CONFIG_GLOBAL
+              value: /data/pi-agent/home/.gitconfig
+            - name: HISTFILE
+              value: /data/pi-agent/home/.bash_history
+            {{- end }}
+            # Parallelism = the CPU limit (nproc reports the node's cores; QA CS-10).
+            - name: MAKEFLAGS
+              value: {{ printf "-j%s" $jobs | quote }}
+            - name: CMAKE_BUILD_PARALLEL_LEVEL
+              value: {{ $jobs | quote }}
+            - name: UV_CONCURRENT_BUILDS
+              value: {{ $jobs | quote }}
+            - name: PYTEST_XDIST_AUTO_NUM_WORKERS
+              value: {{ $jobs | quote }}
+            # Optional platform-supplied keys. The chart Secret always carries them, ""
+            # when unset (#1556: a cleared key must overwrite the old value); "" means
+            # "no key" to every consumer. optional: an auth.existingSecret may omit them.
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -167,9 +246,36 @@ spec:
                   name: {{ include "code-server.secretName" . }}
                   key: git_token
                   optional: true
+            {{- /* Omnigent host in this container (shared kit; parameters: kit README
+                   "Per-service parameters"). Telemetry env is rendered even when disabled. */}}
+            {{- include "woow.omnigentHost.env" (dict
+                  "root" .
+                  "configHome" "/data/pi-agent/omnigent"
+                  "workspace" "/workspace"
+                  "providers" "claude-subscription,pi-original"
+                  "passthrough" "CODEX_HOME,CODEX_PATH,CLAUDE_CONFIG_DIR,PI_CODING_AGENT_DIR,PI_AGENT_DATA_DIR,PI_TELEMETRY,PI_SKIP_VERSION_CHECK,DISABLE_AUTOUPDATER,OPENROUTER_API_KEY,ENABLE_CLAUDEAI_MCP_SERVERS,GIT_CONFIG_GLOBAL,NPM_CONFIG_PREFIX,NPM_CONFIG_CACHE,MAKEFLAGS,CMAKE_BUILD_PARALLEL_LEVEL,UV_CONCURRENT_BUILDS,PYTEST_XDIST_AUTO_NUM_WORKERS,LITELLM_BASE_URL"
+                  "unsetEnv" "PASSWORD,HASHED_PASSWORD,SUDO_PASSWORD") | nindent 12 }}
             {{- with .Values.codeServer.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          {{- if .Values.cookieProxy.enabled }}
+          {{- $probe := printf "curl -fsS -o /dev/null --max-time 8 --unix-socket %s http://localhost/healthz" (include "code-server.socketPath" .) }}
+          startupProbe:
+            exec: {command: ["sh", "-c", {{ $probe | quote }}]}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec: {command: ["sh", "-c", {{ $probe | quote }}]}
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            exec: {command: ["sh", "-c", {{ $probe | quote }}]}
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          {{- else }}
           ports:
             - name: http
               containerPort: {{ .Values.codeServer.port }}
@@ -177,6 +283,7 @@ spec:
           startupProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 30
           readinessProbe:
             httpGet: {path: /healthz, port: http}
@@ -188,6 +295,7 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 5
+          {{- end }}
           resources:
             {{- toYaml .Values.codeServer.resources | nindent 12 }}
           {{- with .Values.securityContext }}
@@ -197,6 +305,20 @@ spec:
           volumeMounts:
             - name: pi-data
               mountPath: /data/pi-agent
+            {{- if $home }}
+            # #1452: the WHOLE HOME survives restarts (persistence.home; seeded by
+            # pi-seed): the pi volume's home/ directory — where 0.1.2/0.1.3 already kept
+            # ~/.ssh, ~/.config, ~/.local, ~/.pi, ~/.gitconfig and ~/.bash_history, so an
+            # upgrade keeps all of them — now also holds ~/.bashrc, ~/.profile, the files
+            # and directories the tenant creates in ~ (~/.nvm, ~/.cargo, ~/.npmrc, …).
+            - name: pi-data
+              mountPath: /home/coder
+              subPath: home
+            {{- end }}
+            # Caches: size-limited emptyDir, never the container layer.
+            - name: home-cache
+              mountPath: /home/coder/.cache
+            # IDE user settings + runtime extensions (inside ~/.local when persisted).
             - name: pi-data
               mountPath: /home/coder/.local/share/code-server/User
               subPath: ide-user
@@ -211,11 +333,76 @@ spec:
               mountPath: /etc/gitconfig
               subPath: gitconfig
               readOnly: true
+            - name: code-server-config
+              mountPath: /etc/code-server
+              readOnly: true
+            {{- include "woow.omnigentHost.volumeMounts" (dict "root" .) | nindent 12 }}
+            {{- if .Values.cookieProxy.enabled }}
+            - name: code-server-socket
+              mountPath: /run/code-server
+            {{- end }}
+        {{- if .Values.cookieProxy.enabled }}
+        # #1458: the entrance. Adds HttpOnly + Secure to the session cookie.
+        - name: cookie-proxy
+          image: "{{ .Values.cookieProxy.image.repository }}:{{ .Values.cookieProxy.image.tag }}"
+          imagePullPolicy: {{ .Values.cookieProxy.image.pullPolicy }}
+          command: ["nginx", "-g", "daemon off;", "-c", "/etc/cookie-proxy/nginx.conf"]
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.codeServer.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet: {path: /woow-cookie-proxy-healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /woow-cookie-proxy-healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.cookieProxy.resources | nindent 12 }}
+          volumeMounts:
+            - name: code-server-socket
+              mountPath: /run/code-server
+            - name: cookie-proxy-tmp
+              mountPath: /tmp
+            - name: settings
+              mountPath: /etc/cookie-proxy/nginx.conf
+              subPath: cookie-proxy.conf
+              readOnly: true
+        {{- end }}
       volumes:
+        {{- if .Values.cookieProxy.enabled }}
+        - name: code-server-socket
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: cookie-proxy-tmp
+          emptyDir:
+            sizeLimit: {{ .Values.cookieProxy.tmpSizeLimit | default "64Mi" }}
+        {{- end }}
+        {{- include "woow.omnigentHost.volumes" (dict "root" . "name" $kitCM) | nindent 8 }}
+        - name: home-cache
+          emptyDir:
+            {{- with (.Values.persistence.cache | default dict).sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- end }}
         - name: settings
           configMap:
             name: {{ include "code-server.fullname" . }}-settings
             defaultMode: 0444
+        - name: code-server-config
+          configMap:
+            name: {{ include "code-server.fullname" . }}-settings
+            defaultMode: 0444
+            items:
+              - key: code-server-config.yaml
+                path: config.yaml
+              {{- if .Values.codeServer.loginI18n }}
+              - key: code-server-i18n.json
+                path: i18n.json
+              {{- end }}
         {{- if .Values.persistence.enabled }}
         - name: pi-data
           persistentVolumeClaim:
