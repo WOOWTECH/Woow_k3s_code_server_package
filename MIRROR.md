@@ -9,17 +9,23 @@ review and prod approval gates, and are then synced here with
 **Do not edit `chart/` or `image/` here** — the next sync overwrites them. Open
 the change against the Gitea repositories instead.
 
+`validation/shared/omnigent-host/` is also mirrored from the same chart source
+commit. `bash scripts/test-chart.sh` stages the original upstream directory
+layout so every chart test, including canonical-kit comparison, runs without
+editing the mirrored chart or accessing Gitea during CI.
+
 ## Current sync
 
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
 | `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `9d783fce5098243be5bf6117c15ed9d2ea6c86b6` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `9d783fce5098243be5bf6117c15ed9d2ea6c86b6` |
 | `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `c93004eceaa3c3761eaec2290321c34e060e56cf` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1`
 
-Chart `0.1.10` / appVersion `4.139.1` — synced 2026-11-09 16:46 UTC.
+Chart `0.1.10` / appVersion `4.139.1` — synced 2026-11-09 18:22 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

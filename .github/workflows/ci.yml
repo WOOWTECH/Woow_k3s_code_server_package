@@ -27,9 +27,7 @@ jobs:
       - name: helm lint
         run: helm lint chart
       - name: Chart tests
-        run: |
-          set -Eeuo pipefail
-          for t in chart/tests/*.sh; do echo "== $t"; bash "$t"; done
+        run: bash scripts/test-chart.sh
 
   # The image is built, verified and published by woow-paas/paas-odoo-ci behind a
   # prod approval gate. Nothing here builds or pushes it; this job only checks
@@ -44,7 +42,8 @@ jobs:
           set -Eeuo pipefail
           found=0
           for f in chart/Chart.yaml chart/values.yaml image/Dockerfile image/README.md \
-                   MIRROR.md PARITY_CONTRACT.md scripts/sync-from-gitea.sh; do
+                   MIRROR.md PARITY_CONTRACT.md scripts/sync-from-gitea.sh \
+                   scripts/test-chart.sh validation/shared/omnigent-host/chart/kit-test-lib.sh; do
             [ -e "$f" ] || { echo "MISSING: $f"; found=1; }
           done
           # The single-instance package lives on legacy/k3s-single-instance only.

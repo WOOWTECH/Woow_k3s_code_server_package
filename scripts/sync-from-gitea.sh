@@ -45,6 +45,9 @@ copy() { # <src dir> <dest dir>
 }
 copy "$WORK/charts/charts/code-server" "$ROOT/chart"
 copy "$WORK/ci/code-server" "$ROOT/image"
+# The upstream chart tests import the canonical kit as well as its vendored copy.
+# Keep both from the same source commit so the mirror can run those tests offline.
+copy "$WORK/charts/shared/omnigent-host" "$ROOT/validation/shared/omnigent-host"
 
 CHART_VERSION="$(sed -n 's/^version: *//p' "$ROOT/chart/Chart.yaml")"
 APP_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"]*\)"\{0,1\}/\1/p' "$ROOT/chart/Chart.yaml")"
@@ -60,6 +63,7 @@ block = (
     "| Mirror path | Source repository | Source path | Commit |\n"
     "|---|---|---|---|\n"
     f"| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `{charts}` |\n"
+    f"| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `{charts}` |\n"
     f"| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `{ci}` |\n"
     "\n"
     f"Base image (podman package, consumed by digest): `{base}`\n"
