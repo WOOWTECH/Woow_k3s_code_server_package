@@ -47,11 +47,11 @@ separately from this source mirror.
 |---|---|---|---|
 | `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
 | `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `4e8fefaf220e068beebab1420addca6acadeb463` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `d4ae18cc2573847c27c24d42607fb6baa7817e37` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903`
 
-Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 02:31 UTC.
+Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 07:50 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

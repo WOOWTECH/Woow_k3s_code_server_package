@@ -1,5 +1,13 @@
 # code-server image
 
+[50-project acceptance lab](qa/project-lab/) contains opt-in Node.js examples,
+HTTP regression checks and reproducible standalone ZIP downloads. Run its
+Node.js 22/Python 3 acceptance with `bash harness/check.sh` from the lab
+directory. Browser checks are optional; enable the `browser` input when manually
+running the Gitea acceptance workflow. The lab is source-only and does not require an image release or
+changes to chart/platform version pins. Its dedicated Gitea workflow runs the
+synthetic acceptance suite without deployment credentials or live services.
+
 三代理候選版加入 Codex CLI 0.167.0／Codex ACP 2.6.0。Pi、Claude、Codex 共用該實例的 `/data/pi-agent/skills` 與 `/data/pi-agent/shared/mcp.json`；修改 MCP 後執行 `woow-agent-sync` 並重新連線。登入仍分開，既有租戶資料與帳號不會被其他實例覆蓋。正式 image digest 仍須通過既有 release gate。
 
 

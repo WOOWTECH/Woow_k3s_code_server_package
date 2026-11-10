@@ -69,3 +69,7 @@ The old single-instance package is preserved on
 [`legacy/k3s-single-instance`](../../tree/legacy/k3s-single-instance) and `legacy-v0.1.0`.
 
 [MIT License](LICENSE)
+
+## 50-project regression and application lab
+
+The opt-in [image/qa/project-lab/README.md](image/qa/project-lab/README.md) contains 50 runnable prototypes, 510 functional fixtures, HTTP/UTF-8 regressions, extracted-download execution, and configurable browser/IDE tooling. CI runs local acceptance without model credentials. Historical three-platform results and remaining limitations are documented separately. The suite is source-only and does not change image versions or start services automatically.
