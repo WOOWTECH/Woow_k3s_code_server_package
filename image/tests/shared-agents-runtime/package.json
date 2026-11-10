@@ -1,0 +1,8 @@
+{
+  "name": "shared-agent-test-runtime",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "smol-toml": "1.9.1"
+  }
+}

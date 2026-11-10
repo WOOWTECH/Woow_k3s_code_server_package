@@ -8,3 +8,7 @@ connectors/python
 connectors/bootstrap
 *.local.env
 *.bak.*
+connectors/omnigent/tests/vendor-fixture
+
+tests/shared-agents-runtime/node_modules
+rootfs/opt/woow-agent-tools/node_modules
