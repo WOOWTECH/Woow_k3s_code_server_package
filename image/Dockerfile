@@ -49,21 +49,30 @@
 #
 # The workflow overrides BASE with the JCR mirror of the same digest (the cluster's
 # ghcr connections are throttled); bump = change the tag AND the digest together.
-ARG BASE=ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1
+ARG BASE=ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903
+FROM docker.io/library/node:22.23.2-bookworm-slim AS connector-vsix
+WORKDIR /build/extensions
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+COPY extensions/ ./
+RUN npm ci --ignore-scripts --no-audit --no-fund && npm run package
+
 FROM ${BASE}
 
 ARG ACP_CLIENT_VERSION=0.2.0
 ARG CLAUDE_CODE_EXTENSION_VERSION=2.1.285
 ARG LANGUAGE_PACK_VERSION=1.131.0
-ARG UV_VERSION=0.12.20
-ARG UV_SHA256=6590717592ace991ff83a63fef799e3ad9d33ecc8f96c5d6bdd732496e79337f
+ARG UV_VERSION=0.13.7
+ARG UV_SHA256=c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
 # omnigent and its dependencies come from omnigent-requirements.lock (hashes); this ARG
 # only cross-checks the lock. PYTHON_VERSION: uv verifies the managed CPython download.
 ARG OMNIGENT_VERSION=0.16.0
-ARG PYTHON_VERSION=3.12.14
+ARG PYTHON_VERSION=3.12.16
 ARG TMUX_VERSION=3.5a-3
 
 USER root
+
+# Explicit, backed-up GPT-6 gateway migration; never runs on startup.
+COPY patches/configure-pi-responses.mjs /opt/woow-agent-tools/configure-pi-responses.mjs
 
 # 1 + 2. built-in extensions. code-server scans lib/vscode/extensions as system
 # extensions: always loaded, independent of the user extensions dir, not removable
@@ -100,6 +109,14 @@ RUN set -eu; \
       v=$(jq -r .version "$m"); test "$v" = "${d##*-}" || { echo "${d}: package.json says ${v}"; exit 1; }; \
     done; \
     mkdir -p "$USERDIR"; chown coder:coder "$USERDIR"
+
+# Keep the ACP approval queue fix while the digest-pinned base is upgraded separately.
+# The patch is idempotent when the base already contains this fix.
+COPY patches/patch-acp-permission-queue.mjs /opt/patches/patch-acp-permission-queue.mjs
+RUN set -eu; \
+    acp=$(find /usr/lib/code-server/lib/vscode/extensions -mindepth 1 -maxdepth 1 -type d -name "formulahendry.acp-client-${ACP_CLIENT_VERSION}*"); \
+    test -n "$acp"; \
+    node /opt/patches/patch-acp-permission-queue.mjs "$acp/dist/extension.js"
 
 # 2b. register the built-in language pack. VS Code writes <user-data-dir>/languagepacks.json
 # only from its install/uninstall hooks (NativeLanguagePackService.update), never at
@@ -335,6 +352,14 @@ RUN set -eu; \
     chmod 0755 /usr/local/bin/omnigent-host-entry; \
     sh -n /usr/local/bin/omnigent-host-entry; \
     test -x /usr/bin/dumb-init; test -x /usr/bin/entrypoint.sh; test -x /usr/local/bin/woow-code-server-entry; test -x /usr/local/bin/codex-code
-ENTRYPOINT ["/usr/bin/dumb-init", "--", "/usr/local/bin/omnigent-host-entry", "/usr/local/bin/woow-code-server-entry", "--bind-addr", "0.0.0.0:8080", "."]
-
+USER root
+COPY connectors/ /opt/woow-connectors/
+COPY --from=connector-vsix /build/extensions/dist/ /opt/woow-connector-vsix/
+COPY rootfs/usr/local/bin/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/woow-connectors /usr/local/bin/woow-connectors-service /usr/local/bin/woow-code-server-entry \
+ && bash /opt/woow-connectors/paseo/install-runtime.sh /opt/woow-connectors/paseo \
+ && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-runtime.py \
+ && chmod -R a+rX /opt/woow-connectors /opt/omnigent
+ENV WOOW_OMNIGENT_SHARED_TOOLS=1
 USER coder
+ENTRYPOINT ["/usr/bin/dumb-init", "--", "python3", "/opt/woow-connectors/omnigent/kit-entry.py", "/usr/local/bin/omnigent-host-entry", "/usr/local/bin/woow-code-server-entry", "--bind-addr", "0.0.0.0:8080", "."]

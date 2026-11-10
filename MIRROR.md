@@ -16,20 +16,26 @@ editing the mirrored chart or accessing Gitea during CI.
 
 ## Current sync
 
-Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261109.1822@sha256:9ce86033b4fef2cc99395114a4db31538b7c32822b34b8d57c2b370e96e27dc3`.
-Upstream mirror approval #619 and image publication approval #621 completed.
-Provider login and real model checks in the PaaS QA instance remain pending.
+Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261110.0132@sha256:3cbc69c2f1f8e701735491d59279311b6ae253b67b14ea4ffc7f94a799a9ca83`.
+Upstream mirror approval #626 and image publication approval #631 completed.
+Build run 40098 verified the image and installed connector source; promotion run
+40128 preserved the candidate digest. Chart 0.1.11 is published through Gitea Helm
+and OCI; its OCI manifest digest is `sha256:7c6a1fe2bd444c92e3e53b3aa4457399d139de4d88641cccfe10a90a94758148`.
+Provider login and real three-agent replies, same-session model switching, and
+shared skill/MCP calls passed in the PaaS QA instance. The full Paseo Codex tool
+test used Full Access; its default Auto review shell remains limited by user
+namespace support. See the [QA acceptance report](image/docs/research/code-server-connectors-acceptance-20261110.md).
 
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `f9c2d59e1a7d15cc85447cf9389fc9f1387a24f8` |
-| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `f9c2d59e1a7d15cc85447cf9389fc9f1387a24f8` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `c98a93d384d7a8eac6bda4ea929bc47ff2d7ec4d` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `adf529e06628777f191fd877ad4d09e5e85facd8` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `adf529e06628777f191fd877ad4d09e5e85facd8` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `549df219595989a7a350ea286e85edc64ab45f4f` |
 
-Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1`
+Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903`
 
-Chart `0.1.10` / appVersion `4.139.1` — synced 2026-11-09 18:30 UTC.
+Chart `0.1.11` / appVersion `4.139.1` — synced 2026-11-10 01:32 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from
@@ -56,7 +62,7 @@ Traditional Chinese language pack, and the `omnigent` CLI. See
 - **Login is code-server's own password login** — no username, no auth-proxy.
   The password lives in the chart Secret and is managed by the platform: shown
   once at launch, then reset or set by the tenant from the service page.
-- pi and Claude Code are built in (terminal and the ACP sidebar); optional
+- Pi, Claude Code and Codex are built in (terminal and the ACP sidebar); optional
   Anthropic / OpenRouter keys and a Git token come from the service page.
 
 ## Resyncing

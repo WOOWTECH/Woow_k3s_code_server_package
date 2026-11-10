@@ -3,15 +3,18 @@
 [繁體中文](README_zh-TW.md)
 
 Browser VS Code with Pi, Claude Code and Codex, deployed as a private service per tenant.
-This mirror follows the merged three-agent sources. The PaaS image has passed its
-release gate; marketplace and existing-instance upgrades are tracked separately.
-PaaS provider logins and real model conversation checks remain pending.
+WOOW Paseo and WOOW Omnigent 0.1.4 appear in Extensions and connect these agents
+to Paseo Web and Omnigent. See [connector setup](image/CONNECTORS.md).
+The [QA acceptance report](image/docs/research/code-server-connectors-acceptance-20261110.md)
+records real three-agent replies, model switching and shared skill/MCP calls;
+PaaS Paseo Codex's complete tool test used Full Access because its default
+Auto review shell could not create a user namespace.
 
 This is a **read-only source mirror**. Edit `charts/code-server` in
 `woow-paas/woow-paas-charts` and `code-server` in `woow-paas/paas-odoo-ci` on Gitea.
 [MIRROR.md](MIRROR.md) records the exact commits and base digest.
 
-| Capability | Candidate behavior |
+| Capability | Behavior |
 |---|---|
 | IDE | code-server 4.139.1, Traditional Chinese UI, pinned ACP and Claude Code extensions |
 | Agents | Pi 0.99.1, Claude Code 2.1.285, Codex CLI 0.167.0 / ACP 2.6.0; terminal and ACP sidebar |
@@ -20,7 +23,7 @@ This is a **read-only source mirror**. Edit `charts/code-server` in
 | Model login | Separate per agent: `pi login`, `claude auth login`, `codex login --device-auth` |
 | IDE login | Platform-managed password; the cookie proxy adds HttpOnly and Secure |
 | Persistence | Separate workspace and agent-data PVCs; HOME, settings and user extensions survive restarts |
-| Integrations | Omnigent host, optional model/Git keys and workspace LiteLLM URL; see chart documentation |
+| Integrations | Paseo and Omnigent Extensions, existing Omnigent host kit, optional model/Git keys and workspace LiteLLM URL |
 
 Shared MCP definitions do not share provider or OAuth logins, tool approvals, or conversation context.
 Switching agents disconnects the previous ACP session and clears the visible chat.
@@ -38,7 +41,8 @@ Omnigent, LiteLLM, and upgrade details.
 
 [image/README.md](image/README.md) explains the thin PaaS derivative of the pinned
 Podman image. [PARITY_CONTRACT.md](PARITY_CONTRACT.md) records the shared candidate baseline.
-The chart and image must be upgraded together: the previous image lacks `codex-code`.
+The chart and image must be upgraded together: chart 0.1.11 requires its paired
+connector-aware image. Published image and source pins are recorded in MIRROR.md.
 
 To join Omnigent, run `omnigent login <server URL>` in the IDE terminal. When the
 chart's Omnigent host integration is enabled, its supervisor starts the host after login

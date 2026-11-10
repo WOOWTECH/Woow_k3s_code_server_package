@@ -3,13 +3,15 @@
 [English](README.md)
 
 瀏覽器版 VS Code，內建 Pi、Claude Code、Codex，每個租戶使用獨立實例。
-本鏡像對齊已合併的三代理來源，PaaS 映像已通過發布核可。商城與既有租戶升級分別追蹤；
-PaaS 的模型登入與真實對話測試仍待完成。
+WOOW Paseo 與 WOOW Omnigent 0.1.4 可在 Extensions 設定，讓兩個 Web 使用本部署的三代理。
+操作見[插件設定](image/CONNECTORS.md)。[QA 驗收紀錄](image/docs/research/code-server-connectors-acceptance-20261110.md)
+包含三代理真實回覆、模型切換與共用 skill／MCP 調用；PaaS Paseo 的 Codex 完整工具測試
+使用 Full Access，預設 Auto review shell 仍受 user namespace 限制。
 
 本 repo 是**唯讀來源鏡像**。正本在 Gitea 的 `woow-paas/woow-paas-charts`（`charts/code-server`）
 與 `woow-paas/paas-odoo-ci`（`code-server`）。[MIRROR.md](MIRROR.md) 記錄來源提交與基底映像 digest。
 
-| 功能 | 候選版行為 |
+| 功能 | 行為 |
 |---|---|
 | IDE | code-server 4.139.1、繁中介面、固定版本 ACP 與 Claude Code 擴充 |
 | 三代理 | Pi 0.99.1、Claude Code 2.1.285、Codex CLI 0.167.0／ACP 2.6.0；可從終端機或 ACP 側欄使用 |
@@ -18,7 +20,7 @@ PaaS 的模型登入與真實對話測試仍待完成。
 | 模型登入 | 分別執行 `pi login`、`claude auth login`、`codex login --device-auth` |
 | IDE 登入 | 平台管理密碼；cookie proxy 補上 HttpOnly、Secure |
 | 持久資料 | 工作區、代理資料分開使用 PVC，HOME、設定與自行安裝的擴充跨重啟保留 |
-| 整合 | Omnigent host、選填模型與 Git 金鑰、同工作區 LiteLLM 網址 |
+| 整合 | Paseo／Omnigent 插件、既有 Omnigent host kit、選填模型與 Git 金鑰、同工作區 LiteLLM 網址 |
 
 共用連線定義不代表共用模型訂閱、OAuth 登入、工具操作批准或對話上下文。
 ACP 切換會斷開上一代理並清空面板顯示。不支援的 MCP 限制或同名技能衝突會阻止遷移並說明原因。
@@ -32,7 +34,8 @@ HOME、Omnigent、LiteLLM 與升級細節見 [chart/README.md](chart/README.md)�
 
 [image/README.md](image/README.md) 說明 PaaS 如何衍生自固定 digest 的 Podman 映像；
 [PARITY_CONTRACT.md](PARITY_CONTRACT.md) 記錄三環境共同候選基準。
-chart 與映像必須一起升級：上一版映像沒有 `codex-code`。
+chart 與映像必須一起升級：chart 0.1.11 需要搭配支援 connector 的映像；
+已發布的映像與來源提交記錄於 MIRROR.md。
 
 要連接 Omnigent，在 IDE 終端機執行 `omnigent login <server URL>`。
 啟用 chart 的 host 整合後，supervisor 會在登入後自動啟動 host，pod 重啟後也會恢復；
