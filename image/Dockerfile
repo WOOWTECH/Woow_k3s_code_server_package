@@ -364,6 +364,8 @@ RUN sed -i "\|  /opt/woow-agent-tools/agent-sync.mjs$|d" /opt/SHA256SUMS \
 RUN chmod +x /usr/local/bin/woow-connectors /usr/local/bin/woow-connectors-service /usr/local/bin/woow-code-server-entry \
  && bash /opt/woow-connectors/paseo/install-runtime.sh /opt/woow-connectors/paseo \
  && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-runtime.py \
+ && WOOW_OMNIGENT_SITE=$(/opt/omnigent/tools/omnigent/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))') \
+ && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-native-resume.py --site-packages "$WOOW_OMNIGENT_SITE" \
  && chmod -R a+rX /opt/woow-connectors /opt/omnigent
 # Digest-pinned bases can predate system bubblewrap. Do not use an unrestricted sandbox.
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap \
