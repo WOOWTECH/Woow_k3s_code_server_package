@@ -49,7 +49,7 @@
 #
 # The workflow overrides BASE with the JCR mirror of the same digest (the cluster's
 # ghcr connections are throttled); bump = change the tag AND the digest together.
-ARG BASE=ghcr.io/woowtech/woow-code-server-amd64:main-5d91687@sha256:aeb8bca7b8f7fc679b95e9d9891b1ec131ddc3be87758a2d7045f80fafee03e1
+ARG BASE=ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903
 FROM docker.io/library/node:22.23.2-bookworm-slim AS connector-vsix
 WORKDIR /build/extensions
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
@@ -70,6 +70,9 @@ ARG PYTHON_VERSION=3.12.16
 ARG TMUX_VERSION=3.5a-3
 
 USER root
+
+# Explicit, backed-up GPT-6 gateway migration; never runs on startup.
+COPY patches/configure-pi-responses.mjs /opt/woow-agent-tools/configure-pi-responses.mjs
 
 # 1 + 2. built-in extensions. code-server scans lib/vscode/extensions as system
 # extensions: always loaded, independent of the user extensions dir, not removable
@@ -106,6 +109,14 @@ RUN set -eu; \
       v=$(jq -r .version "$m"); test "$v" = "${d##*-}" || { echo "${d}: package.json says ${v}"; exit 1; }; \
     done; \
     mkdir -p "$USERDIR"; chown coder:coder "$USERDIR"
+
+# Keep the ACP approval queue fix while the digest-pinned base is upgraded separately.
+# The patch is idempotent when the base already contains this fix.
+COPY patches/patch-acp-permission-queue.mjs /opt/patches/patch-acp-permission-queue.mjs
+RUN set -eu; \
+    acp=$(find /usr/lib/code-server/lib/vscode/extensions -mindepth 1 -maxdepth 1 -type d -name "formulahendry.acp-client-${ACP_CLIENT_VERSION}*"); \
+    test -n "$acp"; \
+    node /opt/patches/patch-acp-permission-queue.mjs "$acp/dist/extension.js"
 
 # 2b. register the built-in language pack. VS Code writes <user-data-dir>/languagepacks.json
 # only from its install/uninstall hooks (NativeLanguagePackService.update), never at
