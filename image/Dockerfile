@@ -366,6 +366,7 @@ RUN chmod +x /usr/local/bin/woow-connectors /usr/local/bin/woow-connectors-servi
  && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-runtime.py \
  && WOOW_OMNIGENT_SITE=$(/opt/omnigent/tools/omnigent/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))') \
  && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-native-resume.py --site-packages "$WOOW_OMNIGENT_SITE" \
+ && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-claude-strict-resume.py --site-packages "$WOOW_OMNIGENT_SITE" \
  && chmod -R a+rX /opt/woow-connectors /opt/omnigent
 # Digest-pinned bases can predate system bubblewrap. Do not use an unrestricted sandbox.
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap \
