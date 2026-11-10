@@ -16,42 +16,49 @@ editing the mirrored chart or accessing Gitea during CI.
 
 ## Current sync
 
-Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261110.0151@sha256:ad6544f9f3e917a7f8c7ee86bcf31793faf65969ab078d1c8c421012e4344d85`.
+Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261110.1622@sha256:0271957892a382d88c141c4a0d3a2b3b53da6cd0b56ba7239fe229608d6dcb5b`.
 
-Gitea source PR #630 is merged. Build 40167 and publication approval #633
-completed; the canonical manifest was verified equal to the tested candidate.
-Chart 0.1.12 adds a code-server-only `securityContext` override, preserving
-the init container, cookie proxy and pod policies. Gitea PR #332 is merged;
-publication run 40266 verified the chart in both Gitea Helm and OCI registries.
-The chart OCI digest is `sha256:d9fbaba022ef3ccd5426955fa47ae29d99065c93edae4dad2dd61739b542cf95`.
+Gitea source PRs [#659](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/659),
+[#662](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/662) and
+[#663](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/663) are merged.
+The image contains both connector extensions at 0.1.6: Refresh MCP releases its
+busy state when the operation completes, independently of notification dismissal,
+and Paseo reports recognized RPC failures with guidance for opening the original
+conversation before refreshing. The bounded PaaS adapter preserves both the
+existing reminder behavior and the shared native-resume source guards.
+
+Gitea Actions build [41326](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/actions/runs/41326)
+passed the actual built-image gates. Normal approval #665 and promotion
+[41331](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/actions/runs/41331)
+completed. The canonical manifest equals the tested candidate; extracted image
+bytes match 45 packaged source files, 18 installed runtime files, three PaaS
+adapter files and both reviewed VSIX packages. The shared source and VSIX bytes
+match the published Podman 4.139.1-8 and HA 0.1.14 images.
+
+Chart 0.1.12 remains unchanged. It adds a code-server-only `securityContext`
+override, preserving the init container, cookie proxy and pod policies. Gitea
+PR #332 is merged; publication run 40266 verified the chart in both Gitea Helm
+and OCI registries. The chart OCI digest is
+`sha256:d9fbaba022ef3ccd5426955fa47ae29d99065c93edae4dad2dd61739b542cf95`.
 The identical `code-server-0.1.12.tgz` package has SHA-256
 `fad8bd37e4103f94e9149111d5cc3d8b005ffe5cabb9f7f650d167424a722990`.
 
-The new image passed native Codex with `workspace-write` and approvals set to
-`never`: shared skill, shell arithmetic and a real MCP result. Workspace
-read/write succeeded while outside writes and network sockets were denied.
-Pi switched GPT-6 Sol to GPT-6.1 Sol in one conversation, retained context and
-completed three MCP calls without errors. Claude completed two MCP calls.
-Auth and shared settings survived the QA image update byte-for-byte.
-
-These sandbox checks use explicit host AppArmor/seccomp profiles where the
-runtime restricts nested user namespaces. They do not prove an unmodified HA
-Supervisor profile works, or replace the earlier Paseo/Omnigent UI acceptance
-record. See [sandbox deployment requirements](image/security/codex/README.md).
-Google MCP OAuth and service-specific authorization/module issues remain
-outside this image's completed checks. Deployment pin updates are coordinated
-separately from this source mirror.
+Deployment pin updates and installed-session acceptance are coordinated separately
+from this source mirror. See [sandbox deployment requirements](image/security/codex/README.md)
+for the host AppArmor/seccomp profiles needed where nested user namespaces are
+restricted; image publication does not prove an unmodified HA Supervisor profile
+works or that external MCP OAuth/service authorization is configured.
 
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
 | `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
 | `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `d4ae18cc2573847c27c24d42607fb6baa7817e37` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `5828588a6589a680a20e2992e306d10136b59dd6` |
 
-Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903`
+Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-8@sha256:fe8b6a0f1b90863cb784cc8a4d69ba33783ee7b87d6322bf975a59511905370d`
 
-Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 07:50 UTC.
+Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 16:40 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

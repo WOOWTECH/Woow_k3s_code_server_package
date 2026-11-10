@@ -49,7 +49,7 @@
 #
 # The workflow overrides BASE with the JCR mirror of the same digest (the cluster's
 # ghcr connections are throttled); bump = change the tag AND the digest together.
-ARG BASE=ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903
+ARG BASE=ghcr.io/woowtech/woow-code-server-amd64:4.139.1-8@sha256:fe8b6a0f1b90863cb784cc8a4d69ba33783ee7b87d6322bf975a59511905370d
 FROM docker.io/library/node:22.23.2-bookworm-slim AS connector-vsix
 WORKDIR /build/extensions
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
@@ -227,6 +227,7 @@ RUN set -eu; \
 # tests run on the patched package; pyc is rewritten because /opt is read-only at runtime.
 COPY omnigent-reminder-patch/ /opt/patches/omnigent-reminder-patch/
 COPY tests/omnigent-reminder-patch.test.py /opt/patches/tests/omnigent-reminder-patch.test.py
+COPY tests/test_paas_strict_composition.py /opt/patches/tests/test_paas_strict_composition.py
 RUN set -eu; \
     VENV=/opt/omnigent/tools/omnigent; \
     SP="$VENV/lib/python3.12/site-packages"; \
@@ -366,7 +367,8 @@ RUN chmod +x /usr/local/bin/woow-connectors /usr/local/bin/woow-connectors-servi
  && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-runtime.py \
  && WOOW_OMNIGENT_SITE=$(/opt/omnigent/tools/omnigent/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))') \
  && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-native-resume.py --site-packages "$WOOW_OMNIGENT_SITE" \
- && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-claude-strict-resume.py --site-packages "$WOOW_OMNIGENT_SITE" \
+ && /opt/omnigent/tools/omnigent/bin/python /opt/patches/omnigent-reminder-patch/patch-strict-composition.py --site-packages "$WOOW_OMNIGENT_SITE" --shared-patcher /opt/woow-connectors/omnigent/patch-claude-strict-resume.py \
+ && /opt/omnigent/tools/omnigent/bin/python /opt/patches/tests/omnigent-reminder-patch.test.py \
  && chmod -R a+rX /opt/woow-connectors /opt/omnigent
 # Digest-pinned bases can predate system bubblewrap. Do not use an unrestricted sandbox.
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap \

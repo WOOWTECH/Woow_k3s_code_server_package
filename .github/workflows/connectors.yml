@@ -47,6 +47,7 @@ jobs:
           node --test connectors/paseo/tests/*.test.mjs connectors/omnigent/tests/*.test.mjs
           node --test connectors/omnigent/tests/pi-mcp-*.test.cjs
           python3 -m unittest discover -s connectors/omnigent/tests -p 'test_*.py'
+          python3 tests/test_paas_strict_composition.py
           # This source fixture verifies the upstream API; installed-image gates test all runtime patches.
           PYTHONPATH="$OMNIGENT_TEST_SITE_PACKAGES:connectors/omnigent/tests" python3 -m unittest test_claude_mcp_plugin.NativeContract.test_actual_installed_pinned_bridge_contract
           if [ -f tests/connectors-cli.test.mjs ]; then
