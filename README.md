@@ -46,8 +46,11 @@ Omnigent, LiteLLM, and upgrade details.
 
 [image/README.md](image/README.md) explains the thin PaaS derivative of the pinned
 Podman image. [PARITY_CONTRACT.md](PARITY_CONTRACT.md) records the shared candidate baseline.
-The chart and image must be upgraded together: chart 0.1.11 requires its paired
-connector-aware image. Published image and source pins are recorded in MIRROR.md.
+The chart and image must be upgraded together: chart 0.1.12 requires its paired
+connector-aware image. It also supports `codeServer.securityContext` overrides
+for the IDE container without changing the init or cookie proxy policies.
+Localhost profiles must already exist on the selected nodes; the chart does not
+install host policies. Published image and source pins are recorded in MIRROR.md.
 
 To join Omnigent, run `omnigent login <server URL>` in the IDE terminal. When the
 chart's Omnigent host integration is enabled, its supervisor starts the host after login

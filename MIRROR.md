@@ -20,8 +20,9 @@ Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:2
 
 Gitea source PR #630 is merged. Build 40167 and publication approval #633
 completed; the canonical manifest was verified equal to the tested candidate.
-Chart 0.1.11 and its canonical host kit are unchanged from the previous sync.
-The published chart OCI digest remains `sha256:7c6a1fe2bd444c92e3e53b3aa4457399d139de4d88641cccfe10a90a94758148`.
+Chart 0.1.12 adds a code-server-only `securityContext` override, preserving
+the init container, cookie proxy and pod policies. This draft mirrors the
+reviewed Gitea PR #332; its merge and official chart publication are pending.
 
 The new image passed native Codex with `workspace-write` and approvals set to
 `never`: shared skill, shell arithmetic and a real MCP result. Workspace
@@ -41,13 +42,13 @@ separately from this source mirror.
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `adf529e06628777f191fd877ad4d09e5e85facd8` |
-| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `adf529e06628777f191fd877ad4d09e5e85facd8` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `accad088d9c5305b1a12080aa68ee75a98305374` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `accad088d9c5305b1a12080aa68ee75a98305374` |
 | `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `4e8fefaf220e068beebab1420addca6acadeb463` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903`
 
-Chart `0.1.11` / appVersion `4.139.1` — synced 2026-11-10 02:02 UTC.
+Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 02:13 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

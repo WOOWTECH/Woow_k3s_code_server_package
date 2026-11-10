@@ -298,7 +298,8 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.codeServer.resources | nindent 12 }}
-          {{- with .Values.securityContext }}
+          {{- $codeServerSecurityContext := mergeOverwrite (deepCopy (.Values.securityContext | default dict)) (.Values.codeServer.securityContext | default dict) }}
+          {{- with $codeServerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}

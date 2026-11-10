@@ -244,4 +244,17 @@ kit 本身只執行 `OG_BIN=/usr/local/bin/omnigent`。`persistence.home.enabled
   沒有簡體字、密碼提示指向「管理員帳密」）、`loginI18n=false` 還原、NOTES／README 的祕密揭露。
 - `tests/test-omnigent-host-kit.sh`：套件副本與 `shared/omnigent-host` 的 sha256 一致、in-container 契約
   （image 啟動模式）、serverUrl 不改 pod template、關閉時不留痕跡、這個 chart 的參數與 values 驗證。
+- `tests/test-container-security-context.sh`：確認個別容器覆寫保留預設防護，且不影響 init、proxy 或 pod 的安全設定。
 - 套件本身的行為測試：`shared/omnigent-host/tests/`。
+
+## 0.1.12：code-server 個別容器安全設定
+
+`codeServer.securityContext` 只覆寫 code-server 容器，會與共用的
+`securityContext` 深度合併。預設空物件保留既有行為；未指定的
+`allowPrivilegeEscalation: false`、`capabilities.drop: [ALL]` 繼續生效。
+pi-seed、cookie proxy 與 pod 的安全設定不受此覆寫影響。
+
+使用已驗證的 Localhost AppArmor／seccomp 設定時，把兩個 profile 放在
+`codeServer.securityContext`，並以 `nodeSelector` 限定已安裝、載入相符
+profile 的節點。chart 不會安裝主機 policy，也不會自動改用寬鬆設定；
+映像中的 sandbox 相容修正仍需搭配該部署允許的核心與安全政策。
