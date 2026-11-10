@@ -54,3 +54,7 @@ scripts/sync-from-gitea.sh <charts-ref> <ci-ref>    # 指定審查或候選提�
 舊單機版保留於 [`legacy/k3s-single-instance`](../../tree/legacy/k3s-single-instance) 與 `legacy-v0.1.0`。
 
 [MIT 授權](LICENSE)
+
+## 50 專案與回歸實測
+
+[image/qa/project-lab/README.md](image/qa/project-lab/README.md) 提供 50 個可執行功能原型、510 個功能案例、HTTP／UTF-8 回歸測試、下載 ZIP 驗證及可設定的瀏覽器／IDE 測試工具。這是可自行執行的原始碼驗收套件；不會自動啟動服務或變更模型登入。歷史三環境實測紀錄與未解決限制亦收錄其中。
