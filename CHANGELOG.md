@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-10 sandbox remediation sync
+
+- Mirror the Codex proc-diagnostic compatibility launcher and shared ACP path.
+- Include opt-in AppArmor/seccomp profiles, attribution, regression tests and a live isolation probe.
+- Record the tested PaaS image and three-agent post-upgrade validation; chart remains 0.1.11.
+
 ## 1.1.0 — 2026-10-01
 
 Resync to chart `0.1.1` (woow-paas-charts `8d6e2761`) and paas-odoo-ci

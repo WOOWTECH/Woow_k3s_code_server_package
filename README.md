@@ -10,6 +10,11 @@ records real three-agent replies, model switching and shared skill/MCP calls;
 PaaS Paseo Codex's complete tool test used Full Access because its default
 Auto review shell could not create a user namespace.
 
+The subsequent sandbox remediation passed native Codex with `workspace-write`
+and approvals set to `never` on PaaS QA. The image includes a scoped bubblewrap
+compatibility launcher; restricted hosts still require the documented optional
+AppArmor/seccomp profiles. See [setup and isolation checks](image/security/codex/README.md).
+
 This is a **read-only source mirror**. Edit `charts/code-server` in
 `woow-paas/woow-paas-charts` and `code-server` in `woow-paas/paas-odoo-ci` on Gitea.
 [MIRROR.md](MIRROR.md) records the exact commits and base digest.
