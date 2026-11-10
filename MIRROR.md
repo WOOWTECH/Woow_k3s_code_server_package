@@ -21,8 +21,11 @@ Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:2
 Gitea source PR #630 is merged. Build 40167 and publication approval #633
 completed; the canonical manifest was verified equal to the tested candidate.
 Chart 0.1.12 adds a code-server-only `securityContext` override, preserving
-the init container, cookie proxy and pod policies. This draft mirrors the
-reviewed Gitea PR #332; its merge and official chart publication are pending.
+the init container, cookie proxy and pod policies. Gitea PR #332 is merged;
+publication run 40266 verified the chart in both Gitea Helm and OCI registries.
+The chart OCI digest is `sha256:d9fbaba022ef3ccd5426955fa47ae29d99065c93edae4dad2dd61739b542cf95`.
+The identical `code-server-0.1.12.tgz` package has SHA-256
+`fad8bd37e4103f94e9149111d5cc3d8b005ffe5cabb9f7f650d167424a722990`.
 
 The new image passed native Codex with `workspace-write` and approvals set to
 `never`: shared skill, shell arithmetic and a real MCP result. Workspace
@@ -42,13 +45,13 @@ separately from this source mirror.
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `accad088d9c5305b1a12080aa68ee75a98305374` |
-| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `accad088d9c5305b1a12080aa68ee75a98305374` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
 | `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `4e8fefaf220e068beebab1420addca6acadeb463` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903`
 
-Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 02:13 UTC.
+Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 02:31 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from
