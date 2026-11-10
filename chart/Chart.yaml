@@ -103,11 +103,12 @@ type: application
 #         (/proc/1/environ) and recommend LiteLLM virtual keys; why a start-up stub cannot
 #         hide the password in a single-uid container (charts#221 tracks the auth move).
 #         The upgrade restarts the pod once (checksum/settings). No image change.
+# 0.1.12: Optional code-server-only securityContext override; preserve init/proxy policy.
 # 0.1.11: Pass shared-tool inheritance to the image-scoped Omnigent connector kit.
 #         Requires the paired Paseo/Omnigent connector image.
 # 0.1.10: Codex ACP, persistent CODEX_HOME and shared deployment-local skills/MCP.
 #         Requires the paired three-agent image; do not upgrade only the chart.
-version: 0.1.11
+version: 0.1.12
 appVersion: "4.139.1"
 keywords: [codex, paas, code-server, vscode, ide, pi-agent, claude-code, omnigent, cloud-service]
 maintainers:

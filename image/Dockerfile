@@ -356,10 +356,21 @@ USER root
 COPY connectors/ /opt/woow-connectors/
 COPY --from=connector-vsix /build/extensions/dist/ /opt/woow-connector-vsix/
 COPY rootfs/usr/local/bin/ /usr/local/bin/
+COPY rootfs/opt/woow-agent-tools/sandbox-bin/ /opt/woow-agent-tools/sandbox-bin/
 RUN chmod +x /usr/local/bin/woow-connectors /usr/local/bin/woow-connectors-service /usr/local/bin/woow-code-server-entry \
  && bash /opt/woow-connectors/paseo/install-runtime.sh /opt/woow-connectors/paseo \
  && /opt/omnigent/tools/omnigent/bin/python /opt/woow-connectors/omnigent/patch-runtime.py \
  && chmod -R a+rX /opt/woow-connectors /opt/omnigent
+# Digest-pinned bases can predate system bubblewrap. Do not use an unrestricted sandbox.
+RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap \
+ && rm -rf /var/lib/apt/lists/* \
+ && chmod 0755 /usr/local/bin/woow-codex /usr/local/bin/codex-code /opt/woow-agent-tools/sandbox-bin/bwrap \
+ && rm -f /usr/local/bin/codex && ln -s /usr/local/bin/woow-codex /usr/local/bin/codex \
+ && sh -n /usr/local/bin/woow-codex && bash -n /opt/woow-agent-tools/sandbox-bin/bwrap \
+ && test -x /usr/bin/bwrap && codex --version \
+ && sed -i -e '/  \/usr\/local\/bin\/codex-code$/d' -e '/  \/usr\/local\/bin\/woow-codex$/d' -e '/  \/opt\/woow-agent-tools\/sandbox-bin\/bwrap$/d' /opt/SHA256SUMS \
+ && sha256sum /usr/local/bin/codex-code /usr/local/bin/woow-codex /opt/woow-agent-tools/sandbox-bin/bwrap >> /opt/SHA256SUMS
+ENV CODEX_PATH=/usr/local/bin/codex
 ENV WOOW_OMNIGENT_SHARED_TOOLS=1
 USER coder
 ENTRYPOINT ["/usr/bin/dumb-init", "--", "python3", "/opt/woow-connectors/omnigent/kit-entry.py", "/usr/local/bin/omnigent-host-entry", "/usr/local/bin/woow-code-server-entry", "--bind-addr", "0.0.0.0:8080", "."]

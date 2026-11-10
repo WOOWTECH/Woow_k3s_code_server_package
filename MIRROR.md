@@ -16,26 +16,42 @@ editing the mirrored chart or accessing Gitea during CI.
 
 ## Current sync
 
-Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261110.0132@sha256:3cbc69c2f1f8e701735491d59279311b6ae253b67b14ea4ffc7f94a799a9ca83`.
-Upstream mirror approval #626 and image publication approval #631 completed.
-Build run 40098 verified the image and installed connector source; promotion run
-40128 preserved the candidate digest. Chart 0.1.11 is published through Gitea Helm
-and OCI; its OCI manifest digest is `sha256:7c6a1fe2bd444c92e3e53b3aa4457399d139de4d88641cccfe10a90a94758148`.
-Provider login and real three-agent replies, same-session model switching, and
-shared skill/MCP calls passed in the PaaS QA instance. The full Paseo Codex tool
-test used Full Access; its default Auto review shell remains limited by user
-namespace support. See the [QA acceptance report](image/docs/research/code-server-connectors-acceptance-20261110.md).
+Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261110.0151@sha256:ad6544f9f3e917a7f8c7ee86bcf31793faf65969ab078d1c8c421012e4344d85`.
+
+Gitea source PR #630 is merged. Build 40167 and publication approval #633
+completed; the canonical manifest was verified equal to the tested candidate.
+Chart 0.1.12 adds a code-server-only `securityContext` override, preserving
+the init container, cookie proxy and pod policies. Gitea PR #332 is merged;
+publication run 40266 verified the chart in both Gitea Helm and OCI registries.
+The chart OCI digest is `sha256:d9fbaba022ef3ccd5426955fa47ae29d99065c93edae4dad2dd61739b542cf95`.
+The identical `code-server-0.1.12.tgz` package has SHA-256
+`fad8bd37e4103f94e9149111d5cc3d8b005ffe5cabb9f7f650d167424a722990`.
+
+The new image passed native Codex with `workspace-write` and approvals set to
+`never`: shared skill, shell arithmetic and a real MCP result. Workspace
+read/write succeeded while outside writes and network sockets were denied.
+Pi switched GPT-6 Sol to GPT-6.1 Sol in one conversation, retained context and
+completed three MCP calls without errors. Claude completed two MCP calls.
+Auth and shared settings survived the QA image update byte-for-byte.
+
+These sandbox checks use explicit host AppArmor/seccomp profiles where the
+runtime restricts nested user namespaces. They do not prove an unmodified HA
+Supervisor profile works, or replace the earlier Paseo/Omnigent UI acceptance
+record. See [sandbox deployment requirements](image/security/codex/README.md).
+Google MCP OAuth and service-specific authorization/module issues remain
+outside this image's completed checks. Deployment pin updates are coordinated
+separately from this source mirror.
 
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `adf529e06628777f191fd877ad4d09e5e85facd8` |
-| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `adf529e06628777f191fd877ad4d09e5e85facd8` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `549df219595989a7a350ea286e85edc64ab45f4f` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `4e8fefaf220e068beebab1420addca6acadeb463` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-5@sha256:96d6a20abf3e108d2efa9aca46461f33d834bd416e3711a9705f63ca2ba7a903`
 
-Chart `0.1.11` / appVersion `4.139.1` — synced 2026-11-10 01:32 UTC.
+Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 02:31 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from

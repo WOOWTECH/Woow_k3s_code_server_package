@@ -10,6 +10,11 @@ records real three-agent replies, model switching and shared skill/MCP calls;
 PaaS Paseo Codex's complete tool test used Full Access because its default
 Auto review shell could not create a user namespace.
 
+The subsequent sandbox remediation passed native Codex with `workspace-write`
+and approvals set to `never` on PaaS QA. The image includes a scoped bubblewrap
+compatibility launcher; restricted hosts still require the documented optional
+AppArmor/seccomp profiles. See [setup and isolation checks](image/security/codex/README.md).
+
 This is a **read-only source mirror**. Edit `charts/code-server` in
 `woow-paas/woow-paas-charts` and `code-server` in `woow-paas/paas-odoo-ci` on Gitea.
 [MIRROR.md](MIRROR.md) records the exact commits and base digest.
@@ -41,8 +46,11 @@ Omnigent, LiteLLM, and upgrade details.
 
 [image/README.md](image/README.md) explains the thin PaaS derivative of the pinned
 Podman image. [PARITY_CONTRACT.md](PARITY_CONTRACT.md) records the shared candidate baseline.
-The chart and image must be upgraded together: chart 0.1.11 requires its paired
-connector-aware image. Published image and source pins are recorded in MIRROR.md.
+The chart and image must be upgraded together: chart 0.1.12 requires its paired
+connector-aware image. It also supports `codeServer.securityContext` overrides
+for the IDE container without changing the init or cookie proxy policies.
+Localhost profiles must already exist on the selected nodes; the chart does not
+install host policies. Published image and source pins are recorded in MIRROR.md.
 
 To join Omnigent, run `omnigent login <server URL>` in the IDE terminal. When the
 chart's Omnigent host integration is enabled, its supervisor starts the host after login

@@ -8,6 +8,8 @@ WOOW Paseo 與 WOOW Omnigent 0.1.4 可在 Extensions 設定，讓兩個 Web 使�
 包含三代理真實回覆、模型切換與共用 skill／MCP 調用；PaaS Paseo 的 Codex 完整工具測試
 使用 Full Access，預設 Auto review shell 仍受 user namespace 限制。
 
+後續 sandbox 修復已在 PaaS QA 以原生 Codex 的 `workspace-write` 與 `approval_policy=never` 通過真實對話、shell 與 MCP 測試。映像內建僅供 Codex 使用的 bubblewrap 相容層；受限制的主機仍須配置文件所列的選用 AppArmor／seccomp profiles。見[部署與隔離驗證](image/security/codex/README.md)。此項原生驗證不改寫前述 connector 測試紀錄。
+
 本 repo 是**唯讀來源鏡像**。正本在 Gitea 的 `woow-paas/woow-paas-charts`（`charts/code-server`）
 與 `woow-paas/paas-odoo-ci`（`code-server`）。[MIRROR.md](MIRROR.md) 記錄來源提交與基底映像 digest。
 
