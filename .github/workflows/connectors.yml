@@ -33,6 +33,11 @@ jobs:
           python3 -m pip install --require-hashes --no-deps -r connectors/omnigent/tests/requirements.lock
           npm ci --ignore-scripts --prefix connectors/omnigent/tests/pi-runtime
           python3 -m pip install --require-hashes --no-deps --only-binary=:all: --ignore-requires-python --target connectors/omnigent/tests/vendor-fixture -r connectors/omnigent/tests/vendor-requirements.lock
+      - name: Shared-agent native writer regression
+        run: |
+          npm ci --ignore-scripts --prefix tests/shared-agents-runtime
+          ln -s ../../../tests/shared-agents-runtime/node_modules rootfs/opt/woow-agent-tools/node_modules
+          node --test tests/shared-agents.test.mjs
       - name: Extension protocol and runtime behavior
         run: |
           npm test --prefix extensions
