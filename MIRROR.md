@@ -9,6 +9,14 @@ review and prod approval gates, and are then synced here with
 **Do not edit `chart/` or `image/` here** — the next sync overwrites them. Open
 the change against the Gitea repositories instead.
 
+**`PARITY_CONTRACT.md` is maintained here, not in Gitea.** The repo-root
+contract is the k3s target's copy and its source of truth: no Gitea repository
+has one (`paas-odoo-ci` and `woow-paas-charts` checked across all branches, tags
+and history, 2026-11-18), and `scripts/sync-from-gitea.sh` never touches it.
+Contract changes are PRs against this repository, opened the same day as the
+podman and HA ones. The Gitea copy of this repository is a read-only mirror of
+GitHub.
+
 `validation/shared/omnigent-host/` is also mirrored from the same chart source
 commit. `bash scripts/test-chart.sh` stages the original upstream directory
 layout so every chart test, including canonical-kit comparison, runs without
