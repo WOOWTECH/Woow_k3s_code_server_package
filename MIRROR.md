@@ -24,24 +24,36 @@ editing the mirrored chart or accessing Gitea during CI.
 
 ## Current sync
 
-Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261110.1622@sha256:0271957892a382d88c141c4a0d3a2b3b53da6cd0b56ba7239fe229608d6dcb5b`.
+Published PaaS image: `jcr-prod.woowtech.io/woow-paas-docker-local/code-server:20261127.2035@sha256:4dabc680dd93ef2be1aeb366825faef93eb85ecf6966f8b7f5d1bb290f107dce`.
 
-Gitea source PRs [#659](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/659),
-[#662](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/662) and
-[#663](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/663) are merged.
-The image contains both connector extensions at 0.1.6: Refresh MCP releases its
-busy state when the operation completes, independently of notification dismissal,
-and Paseo reports recognized RPC failures with guidance for opening the original
-conversation before refreshing. The bounded PaaS adapter preserves both the
-existing reminder behavior and the shared native-resume source guards.
+Gitea source PR [#805](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/pulls/805)
+is merged (merge commit `5faafd1e8171`). The image upgrades Agent Connect: both
+connector extensions are at 0.2.0 and the bundled Paseo runtime is
+`0.17.5-r4-2b20ef5fac0a`, on the unchanged Podman 4.139.1-8 base below. On an
+existing volume, a legacy Paseo 0.11.2 daemon is upgraded in place and keeps its
+server identity and paired browsers.
 
-Gitea Actions build [41326](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/actions/runs/41326)
-passed the actual built-image gates. Normal approval #665 and promotion
-[41331](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/actions/runs/41331)
-completed. The canonical manifest equals the tested candidate; extracted image
-bytes match 45 packaged source files, 18 installed runtime files, three PaaS
-adapter files and both reviewed VSIX packages. The shared source and VSIX bytes
-match the published Podman 4.139.1-8 and HA 0.1.14 images.
+Gitea Actions build [50809](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/actions/runs/50809)
+built the merge commit and passed the actual built-image gates. Its candidate
+digest equals the one from build 50750 of the same source tree. That digest was
+verified with chart 0.1.12 on an owned k3s fixture before approval, and the same
+checks passed again on the build 50809 candidate:
+
+- A fresh install, and an image-only change from `20261110.1622` on the same
+  PVCs (what a platform Redeploy with a new tag does), each passed the 47-case
+  core suite against the Paseo, Woowtech and Apporo web clients, the native
+  panel through the cookie proxy, and the persistence cases: pod deletion,
+  rollout restart, disabled across a restart, and re-enabled with the same
+  identity.
+- On the upgrade, the legacy daemon paired with the official client came back
+  at 0.17.5 under the connector service with the same server ID and keypair.
+  The paired browser reconnected without a new offer, and marker files on both
+  volumes were unchanged.
+
+Approval #821 and promotion
+[50820](https://git-prod.woowtech.io/woow-paas/paas-odoo-ci/actions/runs/50820)
+completed. Promotion retags the candidate in the registry without rebuilding;
+the canonical manifest equals the tested candidate.
 
 Chart 0.1.12 remains unchanged. It adds a code-server-only `securityContext`
 override, preserving the init container, cookie proxy and pod policies. Gitea
@@ -60,13 +72,13 @@ works or that external MCP OAuth/service authorization is configured.
 <!-- BEGIN GENERATED: scripts/sync-from-gitea.sh -->
 | Mirror path | Source repository | Source path | Commit |
 |---|---|---|---|
-| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
-| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `4ce7e68abe5de07f50002841c53a101cf8f32f6c` |
-| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `5828588a6589a680a20e2992e306d10136b59dd6` |
+| `chart/` | `woow-paas/woow-paas-charts` | `charts/code-server/` | `e697593939911b904ec060c2ca9b800b092cf102` |
+| `validation/shared/omnigent-host/` | `woow-paas/woow-paas-charts` | `shared/omnigent-host/` | `e697593939911b904ec060c2ca9b800b092cf102` |
+| `image/` | `woow-paas/paas-odoo-ci` | `code-server/` | `5faafd1e8171089eddf45b7a5201ca22612b0a64` |
 
 Base image (podman package, consumed by digest): `ghcr.io/woowtech/woow-code-server-amd64:4.139.1-8@sha256:fe8b6a0f1b90863cb784cc8a4d69ba33783ee7b87d6322bf975a59511905370d`
 
-Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-10 16:40 UTC.
+Chart `0.1.12` / appVersion `4.139.1` — synced 2026-11-27 20:50 UTC.
 <!-- END GENERATED -->
 
 ## Where each piece comes from
